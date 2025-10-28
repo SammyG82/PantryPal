@@ -1,0 +1,41 @@
+# ========== Python ==========
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+*.db
+
+# ========== Environments ==========
+.env
+.venv/
+env/
+venv/
+.idea/
+.vscode/
+
+# ========== Notebooks ==========
+.ipynb_checkpoints/
+
+# ========== Data ==========
+data/raw/*
+data/cleaned/*
+!data/.gitkeep
+!data/nutrition_cache.json
+
+# ========== Models ==========
+models/*
+!models/.gitkeep
+
+# ========== System ==========
+.DS_Store
+Thumbs.db
+
+# ========== Streamlit cache ==========
+.streamlit/
+
+# ========== Others ==========
+*.zip
+*.tar
+*.tar.gz
