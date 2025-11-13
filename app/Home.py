@@ -75,16 +75,17 @@ def _clear_text_input():
 
 def add_from_textbox():
     txt = _get_current_text()
-    if txt:
-        fix_case = txt.title().strip()
 
-        if fix_case in [i for i in st.session_state.ingredients]:
-            st.warning(f"'{fix_case}' has already been added!")
-        else:
-            st.session_state.ingredients.append(fix_case)
+    fix_case = txt.title().strip()
+    st.session_state.ingredient_warning = None
 
-    _clear_text_input()
-
+    # Check for duplicate
+    if fix_case in st.session_state.ingredients:
+        st.session_state.ingredient_warning = f"'{fix_case}' has already been added!"
+    else:
+        st.session_state.ingredients.append(fix_case)
+    
+    _clear_text_input()  # clear input key for next entry
 
 def delete_image(idx: int):
     st.session_state.images.pop(idx)
@@ -146,6 +147,10 @@ with right:
         key=_current_input_key(),
         on_change=add_from_textbox,
     )
+
+    # Display the warning immediately under the text box
+    if st.session_state.get("ingredient_warning"):
+        st.warning(st.session_state.ingredient_warning)
 
     if st.button("Add"):
         add_from_textbox()
