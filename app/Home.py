@@ -1,4 +1,3 @@
-
 import streamlit as st
 from io import BytesIO
 
@@ -8,12 +7,11 @@ st.set_page_config(page_title="PantryPal", page_icon="🥕", layout="wide")
 # ------------------ SESSION STATE ------------------
 defaults = {
     "ingredients": [],
-    "images": [],  # Now stores dicts with {name, bytes, type}
+    "images": [],  # stores dicts with {name, bytes, type}
     "uploader_key": 0,
     "entry_key": 0,
-    "cooked": False,  # Track if user clicked Cook button
+    "cooked": False,
 }
-
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
 
@@ -37,6 +35,8 @@ st.markdown("""
   padding: .5rem; border: 1px solid rgba(255,255,255,.08);
   border-radius: 12px; background: rgba(255,255,255,.02);
 }
+
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,7 +56,7 @@ st.markdown(
         <li><b>Type</b> your ingredients in the box</li>
       </ul>
       <p class="lead">
-        Hit <b>Cook</b> when you're done and we'll show recipes from <b>Healthiest → Cheat Day</b> 🎉
+        Hit <b>Cook</b> when you're done and we'll show recipes from <b> 💪 Healthiest → Cheat Day</b>  🤩
       </p>
     </div>
     """,
@@ -88,8 +88,44 @@ def add_from_textbox():
     _clear_text_input()  # clear input key for next entry
 
 def delete_image(idx: int):
-    st.session_state.images.pop(idx)
-    st.session_state.uploader_key += 1
+    """Delete one image from session state."""
+    if 0 <= idx < len(st.session_state.images):
+        st.session_state.images.pop(idx)
+
+def process_uploaded_files(uploaded_files):
+    """Process uploaded files and add non-duplicates to session state."""
+    if not uploaded_files:
+        return
+    
+    # Get existing image names
+    existing_names = {img["name"] for img in st.session_state.images}
+    
+    # Track duplicates for warning
+    duplicates = []
+    
+    # Process each uploaded file
+    for file_obj in uploaded_files:
+        if file_obj.name not in existing_names:
+            # New image - add it
+            try:
+                img_bytes = file_obj.read()
+                st.session_state.images.append({
+                    "name": file_obj.name,
+                    "bytes": img_bytes,
+                    "type": file_obj.type
+                })
+            except Exception as e:
+                st.error(f"Error reading file {file_obj.name}: {str(e)}")
+        else:
+            # Duplicate found
+            duplicates.append(file_obj.name)
+    
+    # Show warning for duplicates
+    if duplicates:
+        if len(duplicates) == 1:
+            st.error(f"This image already exists: {duplicates[0]}")
+        else:
+            st.error(f"These images already exist: {', '.join(duplicates)}")
 
 # ------------------ MAIN LAYOUT ------------------
 left, right = st.columns(2, gap="large")
@@ -98,6 +134,7 @@ left, right = st.columns(2, gap="large")
 with left:
     st.markdown('<div class="section-title">📸 <h3>Upload ingredient photos</h3></div>', unsafe_allow_html=True)
 
+    # File uploader
     uploaded = st.file_uploader(
         "Upload images",
         type=["png", "jpg", "jpeg"],
@@ -106,36 +143,39 @@ with left:
         help="Drag & drop or browse. Supported: PNG, JPG, JPEG"
     )
 
-    # Convert uploaded files to bytes for persistence
+    # Process uploaded files if any
     if uploaded:
-        existing_names = {img["name"] for img in st.session_state.images}
-        for f in uploaded:
-            if f.name not in existing_names:
-                # Read file bytes and store
-                img_bytes = f.read()
-                st.session_state.images.append({
-                    "name": f.name,
-                    "bytes": img_bytes,
-                    "type": f.type
-                })
+        process_uploaded_files(uploaded)
+        # Clear the uploader after processing
+        st.session_state.uploader_key += 1
+        st.rerun()
 
-    # Preview list
+    # ---- Preview list with delete buttons ----
     if st.session_state.images:
         st.write("**Added photos:**")
+        
+        # Create a container for each image
         for i, img in enumerate(st.session_state.images):
-            c1, c2 = st.columns([7, 1])
-            with c1:
+            col1, col2 = st.columns([7, 1])
+            
+            with col1:
+                # Image preview container
                 with st.container(border=False):
                     st.markdown('<div class="preview-card">', unsafe_allow_html=True)
-                    st.image(img["bytes"], caption=img["name"], use_container_width=True)
+                    try:
+                        st.image(img["bytes"], caption=img["name"], use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Error displaying image {img['name']}: {str(e)}")
                     st.markdown('</div>', unsafe_allow_html=True)
-            with c2:
-                st.write("")
-                if st.button("❌", key=f"del_img_{i}"):
+            
+            with col2:
+                # Delete button - aligned to the right
+                st.write("")  # Add some vertical spacing
+                if st.button("❌", key=f"del_img_{i}", help=f"Remove {img['name']}"):
                     delete_image(i)
                     st.rerun()
     else:
-        st.info("No photos added yet.")
+        st.info("No photos added yet. Upload some ingredient photos above!")
 
 # ---- RIGHT: TEXT INGREDIENTS ----
 with right:
