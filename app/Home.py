@@ -153,8 +153,15 @@ with right:
         st.warning(st.session_state.ingredient_warning)
 
     if st.button("Add"):
-        add_from_textbox()
-        st.rerun()
+    # Get the current text from the text_input
+        txt = _get_current_text().strip()
+        if not txt:
+            st.warning("Please input an ingredient")    
+        else:
+            add_from_textbox()  # This will handle duplicates and add the ingredient
+            st.rerun()
+
+
 
     if st.session_state.ingredients:
         st.write("**Ingredients added:**")
@@ -166,6 +173,9 @@ with right:
                 if st.button("❌", key=f"del_ing_{i}"):
                     st.session_state.ingredients.pop(i)
                     st.rerun()
+        if st.button("Clear All Ingredients"):
+            st.session_state.ingredients.clear()
+            st.rerun()
     else:
         st.info("No ingredients added yet.")
 
