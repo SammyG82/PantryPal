@@ -76,8 +76,15 @@ def _clear_text_input():
 def add_from_textbox():
     txt = _get_current_text()
     if txt:
-        st.session_state.ingredients.append(txt)
+        fix_case = txt.title().strip()
+
+        if fix_case in [i for i in st.session_state.ingredients]:
+            st.warning(f"'{fix_case}' has already been added!")
+        else:
+            st.session_state.ingredients.append(fix_case)
+
     _clear_text_input()
+
 
 def delete_image(idx: int):
     st.session_state.images.pop(idx)
@@ -134,8 +141,8 @@ with right:
     st.markdown('<div class="section-title">✍️ <h3>Type your ingredients</h3></div>', unsafe_allow_html=True)
 
     st.text_input(
-        "Enter an ingredient:",
-        placeholder="e.g., 2 tomatoes, 1 onion",
+        "Enter individual ingredient:",
+        placeholder="e.g., Onion",
         key=_current_input_key(),
         on_change=add_from_textbox,
     )
