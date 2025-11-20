@@ -1,9 +1,27 @@
 import streamlit as st
+import os
+import sys
+from pathlib import Path
 
+# -------------------------------------------------
+# MAKE PROJECT ROOT IMPORTABLE FOR "scripts" MODULE
+# -------------------------------------------------
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from scripts.recipe_search import load_recipes, match_recipes  # uses your updated file
+
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
 st.set_page_config(page_title="Results • PantryPal", page_icon="🥗", layout="wide")
 
-# ------------------ STYLES ------------------
-st.markdown("""
+# -------------------------------------------------
+# GLOBAL STYLES
+# -------------------------------------------------
+st.markdown(
+    """
 <style>
 .header-wrap {text-align:center; margin-top:0.5rem; margin-bottom:1.25rem;}
 .header-wrap h1 {font-size: 2.2rem; line-height: 1.1; margin: 0;}
@@ -21,48 +39,60 @@ st.markdown("""
 .badge-healthy {background: rgba(76, 175, 80, 0.2); color: #4CAF50;}
 .badge-balanced {background: rgba(255, 193, 7, 0.2); color: #FFC107;}
 .badge-cheat {background: rgba(244, 67, 54, 0.2); color: #F44336;}
+.muted {color: rgba(255,255,255,0.5);}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# ------------------ HEADER ------------------
-st.markdown('<div class="header-wrap"><h1>🥗 Your Recipe Matches</h1></div>', unsafe_allow_html=True)
+# -------------------------------------------------
+# HEADER
+# -------------------------------------------------
+st.markdown(
+    '<div class="header-wrap"><h1>🥗 Your Recipe Matches</h1></div>',
+    unsafe_allow_html=True,
+)
 
-# ------------------ GET DATA ------------------
+# -------------------------------------------------
+# GET SESSION STATE DATA
+# -------------------------------------------------
 imgs = st.session_state.get("images", [])
 ings = st.session_state.get("ingredients", [])
 cooked = st.session_state.get("cooked", False)
 
-# Check if user actually clicked Cook button
 if not cooked:
-    st.warning("⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button.")
+    st.warning(
+        "⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button."
+    )
     if st.button("⬅️ Back to Home", use_container_width=True):
         st.switch_page("Home.py")
     st.stop()
 
 if not imgs and not ings:
-    st.warning("⚠️ No inputs found. Go back to **Home** and add images or ingredients.")
+    st.warning("⚠️ No inputs found. Add ingredients on the Home page.")
     if st.button("⬅️ Back to Home", use_container_width=True):
         st.switch_page("Home.py")
     st.stop()
 
-# ------------------ SHOW INPUTS ------------------
+# -------------------------------------------------
+# SHOW USER INPUTS
+# -------------------------------------------------
 with st.expander("📦 Your ingredients", expanded=True):
+
     left, right = st.columns(2)
-    
+
     with left:
-        if ings:
-            st.write("**Text ingredients:**")
-            for x in ings:
-                st.write(f"- {x}")
-        else:
-            st.write("*No text ingredients provided.*")
-    
+        st.write(
+            "**Text ingredients:**" if ings else "*No text ingredients provided.*"
+        )
+        for x in ings:
+            st.write(f"- {x}")
+
     with right:
         if imgs:
             st.write(f"**Photos: ({len(imgs)} uploaded)**")
-            # Show thumbnails in a grid
             cols = st.columns(3)
-            for idx, img in enumerate(imgs[:3]):  # Show first 3
+            for idx, img in enumerate(imgs[:3]):
                 with cols[idx % 3]:
                     st.image(img["bytes"], caption=img["name"], use_container_width=True)
             if len(imgs) > 3:
@@ -72,67 +102,87 @@ with st.expander("📦 Your ingredients", expanded=True):
 
 st.divider()
 
-# ------------------ MOCK RECIPES ------------------
-st.subheader("Recipes ranked by health score")
+# -------------------------------------------------
+# LOAD DATASET
+# -------------------------------------------------
+@st.cache_data(show_spinner=False)
+def _load_df():
+    # path is relative to project root (PantryPal/)
+    return load_recipes("data/raw/recipes.csv")
 
-# Mock recipe data (you'll replace this with real matching later)
-mock_recipes = [
-    {
-        "name": "Grilled Veggie Power Bowl",
-        "health": "Super Healthy",
-        "badge_class": "badge-healthy",
-        "description": "Packed with vitamins, fiber, and protein. Low calories, high nutrition.",
-        "ingredients_match": "8/10 ingredients matched"
-    },
-    {
-        "name": "Chicken & Vegetable Stir-Fry",
-        "health": "Balanced",
-        "badge_class": "badge-balanced",
-        "description": "Good protein-to-carb ratio. Moderate calories with healthy fats.",
-        "ingredients_match": "7/10 ingredients matched"
-    },
-    {
-        "name": "Creamy Pasta Carbonara",
-        "health": "Balanced",
-        "badge_class": "badge-balanced",
-        "description": "Higher in calories but includes vegetables. Good for active days.",
-        "ingredients_match": "6/10 ingredients matched"
-    },
-    {
-        "name": "Loaded Nachos Supreme",
-        "health": "Cheat Day",
-        "badge_class": "badge-cheat",
-        "description": "High calories, high satisfaction! Perfect for treating yourself.",
-        "ingredients_match": "5/10 ingredients matched"
-    },
-]
 
-for i, recipe in enumerate(mock_recipes, start=1):
-    st.markdown(f"""
-    <div class="recipe-card">
-        <h3>
-            {i}. {recipe['name']}
-            <span class="health-badge {recipe['badge_class']}">{recipe['health']}</span>
-        </h3>
-        <p>{recipe['description']}</p>
-        <p><b>Match:</b> {recipe['ingredients_match']}</p>
-    </div>
-    """, unsafe_allow_html=True)
+df = _load_df()
+
+st.subheader("Recipes ranked by ingredient matches")
+
+# -------------------------------------------------
+# BADGE HELPER
+# -------------------------------------------------
+def _badge_for_pct(p: float):
+    """Map pct_recipe → label + CSS class."""
+    p = p * 100
+    if p >= 80:
+        return "Super Close Match", "badge-healthy"
+    elif p >= 60:
+        return "Good Match", "badge-balanced"
+    else:
+        return "Loose Match", "badge-cheat"
+
+
+# -------------------------------------------------
+# MATCH RECIPES
+# -------------------------------------------------
+if ings:
+    # quota=7 → pick up to 7 recipes using our score + thresholds
+    results = match_recipes(ings, df, quota=7)
+
+    if not results:
+        st.info("No direct matches found. Try adding more common ingredients ✨")
+    else:
+        for i, rec in enumerate(results, start=1):
+            name = rec["name"]
+            hits = rec["matches"]
+            total = rec["recipe_size"]
+            pct_r = int(rec["pct_recipe"] * 100)
+            pct_u = int(rec["pct_user"] * 100)
+
+            label, badge_class = _badge_for_pct(rec["pct_recipe"])
+
+            st.markdown(
+                f"""
+            <div class="recipe-card">
+                <h3>{i}. {name}
+                    <span class="health-badge {badge_class}">{label}</span>
+                </h3>
+                <p><b>Matched ingredients:</b> {hits} / {total}
+                   (<b>{pct_r}%</b> of this recipe)</p>
+                <p><b>Of your list used:</b> {pct_u}%</p>
+                <p class="muted">Top 7 recipes chosen using overlap scoring.</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+else:
+    st.info("Type some ingredients on the Home page first.")
 
 st.divider()
 
-# ------------------ ACTIONS ------------------
-col1, col2 = st.columns(2)
-with col1:
+# -------------------------------------------------
+# ACTION BUTTONS
+# -------------------------------------------------
+left, right = st.columns(2)
+
+with left:
     if st.button("⬅️ Back to Home", use_container_width=True):
-        # Don't reset cooked flag - just go back
         st.switch_page("Home.py")
-        
-with col2:
-    if st.button("🔄 Clear All & Start Over", use_container_width=True, type="primary"):
+
+with right:
+    if st.button(
+        "🔄 Clear & Start Over", use_container_width=True, type="primary"
+    ):
         st.session_state.ingredients = []
         st.session_state.images = []
+        st.session_state.cooked = False
         st.session_state.uploader_key += 1
-        st.session_state.cooked = False  # Only reset cooked flag when clearing
-        st.success("✅ Cleared! Redirecting...")
+        st.success("Reset!")
         st.switch_page("Home.py")
