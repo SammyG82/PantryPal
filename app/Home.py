@@ -1,229 +1,62 @@
 import streamlit as st
-from io import BytesIO
 
-# ------------------ PAGE CONFIG ------------------
+# ------------------ PAGE CONFIG (MUST BE FIRST) ------------------
 st.set_page_config(page_title="PantryPal", page_icon="🥕", layout="wide")
+
+# ------------------ IMPORT STYLES & COMPONENTS ------------------
+import styles
+from components.image_upload import render_image_uploader
+from components.ingredient_input import render_ingredient_input
+from components.cook_button import render_cook_button
+
+# Apply CSS after page config
+styles.apply_styles()
 
 # ------------------ SESSION STATE ------------------
 defaults = {
     "ingredients": [],
-    "images": [],  # stores dicts with {name, bytes, type}
+    "images": [],
     "uploader_key": 0,
     "entry_key": 0,
     "cooked": False,
+    "ingredient_warning": None,
 }
+
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
-
-# ------------------ GLOBAL STYLES ------------------
-st.markdown("""
-<style>
-.header-wrap {text-align:center; margin-top:0.5rem; margin-bottom:1.25rem;}
-.header-wrap h1 {font-size: 2.6rem; line-height: 1.1; margin: 0 0 0.5rem 0;}
-.lead {font-size: 1.12rem; line-height: 1.75; margin: 0.25rem 0 0.75rem;}
-.lead b {font-weight: 700;}
-.callout {
-  margin: 0 auto 1.25rem; max-width: 900px; padding: 1rem 1.25rem;
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
-  background: rgba(255,255,255,0.03);
-}
-.callout ul {margin: 0.25rem 0 0.75rem 1.2rem;}
-.callout li {margin: 0.25rem 0;}
-.section-title {display:flex; align-items:center; gap:.5rem;}
-.stButton>button {height: 42px; border-radius: 12px; font-weight: 600;}
-.preview-card {
-  padding: .5rem; border: 1px solid rgba(255,255,255,.08);
-  border-radius: 12px; background: rgba(255,255,255,.02);
-}
-
-
-</style>
-""", unsafe_allow_html=True)
 
 # ------------------ HEADER ------------------
 st.markdown(
     """
-    <div class="header-wrap">
-      <h1>🥕 PantryPal</h1>
-    </div>
-    <div class="callout">
-      <p class="lead">
-        <b>Welcome to PantryPal!</b> Not sure what to cook? <b>We've got you covered.</b>
-      </p>
-      <p class="lead"><b>You can either:</b></p>
-      <ul>
-        <li><b>Upload photos</b> of the ingredients you have</li>
-        <li><b>Type</b> your ingredients in the box</li>
-      </ul>
-      <p class="lead">
-        Hit <b>Cook</b> when you're done and we'll show recipes from <b> 💪 Healthiest → Cheat Day</b>  🤩
-      </p>
+    <div style="width:100%; text-align:center; margin-top:10px; margin-bottom:20px;">
+        <h1>🥕 PantryPal</h1>
+        <div class="callout">
+            <p class="lead"><b>Welcome to PantryPal!</b> Not sure what to cook? <b>We've got you covered.</b></p>
+            <p class="lead"><b>You can either:</b></p>
+            <ul>
+                <b>Upload photos</b> of the ingredients you have<br>
+                <b>Type</b> your ingredients in the box
+            </ul>
+            <p class="lead">Hit <b>Cook</b> when you're done and we'll show recipes from <b> 💪 Healthiest → Cheat Day</b> 🤩</p>
+        </div>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-# ------------------ HELPERS ------------------
-def _current_input_key() -> str:
-    return f"ing_entry_{st.session_state.entry_key}"
+# ------------------ MAIN CONTENT ------------------
+content_container = st.container()
 
-def _get_current_text() -> str:
-    return st.session_state.get(_current_input_key(), "").strip()
+with content_container:
+    left, right = st.columns(2, gap="large")
 
-def _clear_text_input():
-    st.session_state.entry_key += 1
+    # ---- LEFT COLUMN: IMAGE UPLOADER ----
+    with left:
+        render_image_uploader()
 
-def add_from_textbox():
-    txt = _get_current_text()
+    # ---- RIGHT COLUMN: INGREDIENT INPUT ----
+    with right:
+        render_ingredient_input()
 
-    fix_case = txt.title().strip()
-    st.session_state.ingredient_warning = None
-
-    # Check for duplicate
-    if fix_case in st.session_state.ingredients:
-        st.session_state.ingredient_warning = f"'{fix_case}' has already been added!"
-    else:
-        st.session_state.ingredients.append(fix_case)
-    
-    _clear_text_input()  # clear input key for next entry
-
-def delete_image(idx: int):
-    """Delete one image from session state."""
-    if 0 <= idx < len(st.session_state.images):
-        st.session_state.images.pop(idx)
-
-def process_uploaded_files(uploaded_files):
-    """Process uploaded files and add non-duplicates to session state."""
-    if not uploaded_files:
-        return
-    
-    # Get existing image names
-    existing_names = {img["name"] for img in st.session_state.images}
-    
-    # Track duplicates for warning
-    duplicates = []
-    
-    # Process each uploaded file
-    for file_obj in uploaded_files:
-        if file_obj.name not in existing_names:
-            # New image - add it
-            try:
-                img_bytes = file_obj.read()
-                st.session_state.images.append({
-                    "name": file_obj.name,
-                    "bytes": img_bytes,
-                    "type": file_obj.type
-                })
-            except Exception as e:
-                st.error(f"Error reading file {file_obj.name}: {str(e)}")
-        else:
-            # Duplicate found
-            duplicates.append(file_obj.name)
-    
-    # Show warning for duplicates
-    if duplicates:
-        if len(duplicates) == 1:
-            st.error(f"This image already exists: {duplicates[0]}")
-        else:
-            st.error(f"These images already exist: {', '.join(duplicates)}")
-
-# ------------------ MAIN LAYOUT ------------------
-left, right = st.columns(2, gap="large")
-
-# ---- LEFT: IMAGES ----
-with left:
-    st.markdown('<div class="section-title">📸 <h3>Upload ingredient photos</h3></div>', unsafe_allow_html=True)
-
-    # File uploader
-    uploaded = st.file_uploader(
-        "Upload images",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-        key=f"uploader_{st.session_state.uploader_key}",
-        help="Drag & drop or browse. Supported: PNG, JPG, JPEG"
-    )
-
-    # Process uploaded files if any
-    if uploaded:
-        process_uploaded_files(uploaded)
-        # Clear the uploader after processing
-        st.session_state.uploader_key += 1
-        st.rerun()
-
-    # ---- Preview list with delete buttons ----
-    if st.session_state.images:
-        st.write("**Added photos:**")
-        
-        # Create a container for each image
-        for i, img in enumerate(st.session_state.images):
-            col1, col2 = st.columns([7, 1])
-            
-            with col1:
-                # Image preview container
-                with st.container(border=False):
-                    st.markdown('<div class="preview-card">', unsafe_allow_html=True)
-                    try:
-                        st.image(img["bytes"], caption=img["name"], use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error displaying image {img['name']}: {str(e)}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                # Delete button - aligned to the right
-                st.write("")  # Add some vertical spacing
-                if st.button("❌", key=f"del_img_{i}", help=f"Remove {img['name']}"):
-                    delete_image(i)
-                    st.rerun()
-    else:
-        st.info("No photos added yet. Upload some ingredient photos above!")
-
-# ---- RIGHT: TEXT INGREDIENTS ----
-with right:
-    st.markdown('<div class="section-title">✍️ <h3>Type your ingredients</h3></div>', unsafe_allow_html=True)
-
-    st.text_input(
-        "Enter individual ingredient:",
-        placeholder="e.g., Onion",
-        key=_current_input_key(),
-        on_change=add_from_textbox,
-    )
-
-    # Display the warning immediately under the text box
-    if st.session_state.get("ingredient_warning"):
-        st.warning(st.session_state.ingredient_warning)
-
-    if st.button("Add"):
-    # Get the current text from the text_input
-        txt = _get_current_text().strip()
-        if not txt:
-            st.warning("Please input an ingredient")    
-        else:
-            add_from_textbox()  # This will handle duplicates and add the ingredient
-            st.rerun()
-
-
-
-    if st.session_state.ingredients:
-        st.write("**Ingredients added:**")
-        for i, ing in enumerate(st.session_state.ingredients):
-            c1, c2 = st.columns([6, 1])
-            with c1:
-                st.write(f"- {ing}")
-            with c2:
-                if st.button("❌", key=f"del_ing_{i}"):
-                    st.session_state.ingredients.pop(i)
-                    st.rerun()
-        if st.button("Clear All Ingredients"):
-            st.session_state.ingredients.clear()
-            st.rerun()
-    else:
-        st.info("No ingredients added yet.")
-
-# ---- COOK BUTTON ----
-st.divider()
-if st.button("🍳 Cook!", use_container_width=True):
-    if not st.session_state.images and not st.session_state.ingredients:
-        st.error("⚠️ Please add at least one ingredient or photo before cooking!")
-    else:
-        st.session_state.cooked = True  # Mark as cooked
-        st.switch_page("pages/Results.py")
+    # ---- COOK BUTTON ----
+    render_cook_button()
