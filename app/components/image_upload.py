@@ -1,38 +1,109 @@
 import streamlit as st
-from utils.helpers import process_uploaded_files, delete_image
+from PIL import Image
+import io
 
 def render_image_uploader():
-    st.markdown('<div class="section-title">📸 <h3>Upload ingredient photos</h3></div>', unsafe_allow_html=True)
-
+    st.markdown("""
+        <div class="section-title">
+            <span style="font-size: 1.8rem;">📸</span>
+            <h3>Upload ingredient photos</h3>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Create a visually appealing upload area
     uploaded = st.file_uploader(
-        "Upload images",
+        "Choose images",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
         key=f"uploader_{st.session_state.uploader_key}",
-        help="Drag & drop or browse. Supported: PNG, JPG, JPEG"
+        label_visibility="collapsed",
+        help="📷 Drag and drop or click to upload photos of your ingredients"
     )
-
+    
     if uploaded:
-        process_uploaded_files(uploaded)
-        st.session_state.uploader_key += 1
-        st.rerun()
-
-    # Preview uploaded images
-    if st.session_state.images:
-        st.write("**Added photos:**")
-        for i, img in enumerate(st.session_state.images):
-            col1, col2 = st.columns([7, 1])
-            with col1:
-                st.markdown('<div class="preview-card">', unsafe_allow_html=True)
-                try:
-                    st.image(img["bytes"], caption=img["name"], use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error displaying image {img['name']}: {str(e)}")
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col2:
-                st.write("")
-                if st.button("❌", key=f"del_img_{i}", help=f"Remove {img['name']}"):
-                    delete_image(i)
-                    st.rerun()
-    else:
-        st.info("No photos added yet. Upload some ingredient photos above!")
+        # Process and store images
+        st.session_state.images = []
+        for file in uploaded:
+            img_bytes = file.read()
+            st.session_state.images.append({
+                "name": file.name,
+                "bytes": img_bytes
+            })
+        
+        # Display uploaded images in a nice grid
+        st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.1); 
+                        padding: 1.25rem; 
+                        border-radius: 16px; 
+                        border: 1px solid rgba(255,255,255,0.2);
+                        margin-top: 1.5rem;">
+                <h4 style="color: #fff; margin-top: 0; margin-bottom: 1rem; font-size: 1.2rem;">
+                    📸 Uploaded Photos ({len(st.session_state.images)})
+                </h4>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Create a responsive grid for images
+        cols = st.columns(2)
+        for idx, img_data in enumerate(st.session_state.images):
+            with cols[idx % 2]:
+                # Create a nice card for each image
+                with st.container():
+                    st.markdown(f"""
+                        <div class="preview-card">
+                            <style>
+                                .preview-card img {{
+                                    border-radius: 12px;
+                                    width: 100%;
+                                    height: auto;
+                                }}
+                            </style>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display the image
+                    try:
+                        image = Image.open(io.BytesIO(img_data["bytes"]))
+                        st.image(image, caption=f"📷 {img_data['name']}", use_container_width=True)
+                    except:
+                        st.error(f"Could not display {img_data['name']}")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Clear button
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🔄 Clear All Photos", use_container_width=True):
+                st.session_state.images = []
+                st.session_state.uploader_key += 1
+                st.rerun()
+    
+    elif not st.session_state.images:
+        # Show placeholder message when no images
+        st.markdown("""
+            <div style="background: rgba(255,255,255,0.05); 
+                        padding: 2rem; 
+                        border-radius: 16px; 
+                        border: 2px dashed rgba(255,255,255,0.3);
+                        text-align: center;
+                        margin-top: 1rem;">
+                <p style="color: rgba(255,255,255,0.7); font-size: 1.1rem; margin: 0;">
+                    📸 No photos uploaded yet<br>
+                    <span style="font-size: 0.95rem;">Click or drag images above</span>
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # If images exist in session state but uploader is empty (after clear)
+    elif st.session_state.images and not uploaded:
+        st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.1); 
+                        padding: 1.25rem; 
+                        border-radius: 16px; 
+                        border: 1px solid rgba(255,255,255,0.2);
+                        margin-top: 1.5rem;">
+                <h4 style="color: #fff; margin-top: 0; margin-bottom: 1rem;">
+                    📸 {len(st.session_state.images)} photo(s) ready
+                </h4>
+            </div>
+        """, unsafe_allow_html=True)
