@@ -1,7 +1,9 @@
-import streamlit as st
+# app/pages/Results.py
 import os
 import sys
 from pathlib import Path
+
+import streamlit as st
 
 # -------------------------------------------------
 # MAKE PROJECT ROOT IMPORTABLE FOR "scripts" MODULE
@@ -10,7 +12,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from scripts.recipe_search import load_recipes, match_recipes  # uses your updated file
+from scripts.recipe_search import load_recipes, match_recipes  # noqa: E402
+
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -61,9 +64,7 @@ ings = st.session_state.get("ingredients", [])
 cooked = st.session_state.get("cooked", False)
 
 if not cooked:
-    st.warning(
-        "⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button."
-    )
+    st.warning("⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button.")
     if st.button("⬅️ Back to Home", use_container_width=True):
         st.switch_page("Home.py")
     st.stop()
@@ -78,13 +79,10 @@ if not imgs and not ings:
 # SHOW USER INPUTS
 # -------------------------------------------------
 with st.expander("📦 Your ingredients", expanded=True):
-
     left, right = st.columns(2)
 
     with left:
-        st.write(
-            "**Text ingredients:**" if ings else "*No text ingredients provided.*"
-        )
+        st.write("**Text ingredients:**" if ings else "*No text ingredients provided.*")
         for x in ings:
             st.write(f"- {x}")
 
@@ -107,61 +105,107 @@ st.divider()
 # -------------------------------------------------
 @st.cache_data(show_spinner=False)
 def _load_df():
-    # path is relative to project root (PantryPal/)
+    # recipes live at data/raw/recipes.csv relative to project root
     return load_recipes("data/raw/recipes.csv")
 
 
 df = _load_df()
 
-st.subheader("Recipes ranked by ingredient matches")
+st.subheader("Recipes based on your ingredients & health")
+
 
 # -------------------------------------------------
-# BADGE HELPER
+# BADGE HELPERS
 # -------------------------------------------------
-def _badge_for_pct(p: float):
-    """Map pct_recipe → label + CSS class."""
-    p = p * 100
-    if p >= 80:
-        return "Super Close Match", "badge-healthy"
-    elif p >= 60:
+def _badge_for_match(pct_user: float):
+    """Badge for ingredient-match quality (how much of *your* list is used)."""
+    pct = pct_user * 100
+    if pct >= 80:
+        return "Great Match", "badge-healthy"
+    elif pct >= 60:
         return "Good Match", "badge-balanced"
     else:
         return "Loose Match", "badge-cheat"
+
+
+def _badge_for_health(score: float):
+    """Badge for healthiness (0–1)."""
+    if score >= 0.70:
+        return "Super Healthy", "badge-healthy"
+    elif score >= 0.40:
+        return "Balanced", "badge-balanced"
+    else:
+        return "Cheat Day-ish", "badge-cheat"
 
 
 # -------------------------------------------------
 # MATCH RECIPES
 # -------------------------------------------------
 if ings:
-    # quota=7 → pick up to 7 recipes using our score + thresholds
     results = match_recipes(ings, df, quota=7)
 
     if not results:
         st.info("No direct matches found. Try adding more common ingredients ✨")
     else:
-        for i, rec in enumerate(results, start=1):
-            name = rec["name"]
-            hits = rec["matches"]
-            total = rec["recipe_size"]
-            pct_r = int(rec["pct_recipe"] * 100)
-            pct_u = int(rec["pct_user"] * 100)
+        # left column: best by ingredient overlap (already sorted by match score)
+        # right column: same recipes, but sorted by health_score
+        col_match, col_health = st.columns(2)
 
-            label, badge_class = _badge_for_pct(rec["pct_recipe"])
+        with col_match:
+            st.markdown("#### 🔍 Best ingredient matches")
+            for i, rec in enumerate(results, start=1):
+                name = rec["name"]
+                hits = rec["matches"]
+                total = rec["recipe_size"]
+                pct_u = int(rec["pct_user"] * 100)
 
-            st.markdown(
-                f"""
-            <div class="recipe-card">
-                <h3>{i}. {name}
-                    <span class="health-badge {badge_class}">{label}</span>
-                </h3>
-                <p><b>Matched ingredients:</b> {hits} / {total}
-                   (<b>{pct_r}%</b> of this recipe)</p>
-                <p><b>Of your list used:</b> {pct_u}%</p>
-                <p class="muted">Top 7 recipes chosen using overlap scoring.</p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
+                label, badge_class = _badge_for_match(rec["pct_user"])
+
+                st.markdown(
+                    f"""
+                    <div class="recipe-card">
+                        <h3>{i}. {name}
+                            <span class="health-badge {badge_class}">{label}</span>
+                        </h3>
+                        <p><b>Matched ingredients:</b> {hits} / {total}</p>
+                        <p><b>Of your list used:</b> {pct_u}%</p>
+                        <p class="muted">Ranked by how well the recipe fits what you have.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        with col_health:
+            st.markdown("#### 💚 Healthiest among these")
+            by_health = sorted(results, key=lambda r: r["health_score"], reverse=True)
+
+            for i, rec in enumerate(by_health, start=1):
+                name = rec["name"]
+                hscore = rec["health_score"]
+                protein = rec["protein_g"]
+                fat = rec["fat_g"]
+                sugar = rec["sugar_g"]
+                carbs = rec["carbs_g"]
+
+                label, badge_class = _badge_for_health(hscore)
+                pct_h = int(hscore * 100)
+
+                st.markdown(
+                    f"""
+                    <div class="recipe-card">
+                        <h3>{i}. {name}
+                            <span class="health-badge {badge_class}">{label}</span>
+                        </h3>
+                        <p><b>Health score:</b> {pct_h}/100</p>
+                        <p><b>Approx. macros (per serving, from dataset):</b></p>
+                        <p>Protein: {protein:.1f} g • Fat: {fat:.1f} g
+                        • Sugar: {sugar:.1f} g • Carbs: {carbs:.1f} g</p>
+                        <p class="muted">Score based on protein, fat, sugar and net carbs.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )       
+
 else:
     st.info("Type some ingredients on the Home page first.")
 
@@ -170,16 +214,14 @@ st.divider()
 # -------------------------------------------------
 # ACTION BUTTONS
 # -------------------------------------------------
-left, right = st.columns(2)
+left_btn, right_btn = st.columns(2)
 
-with left:
+with left_btn:
     if st.button("⬅️ Back to Home", use_container_width=True):
         st.switch_page("Home.py")
 
-with right:
-    if st.button(
-        "🔄 Clear & Start Over", use_container_width=True, type="primary"
-    ):
+with right_btn:
+    if st.button("🔄 Clear & Start Over", use_container_width=True, type="primary"):
         st.session_state.ingredients = []
         st.session_state.images = []
         st.session_state.cooked = False
