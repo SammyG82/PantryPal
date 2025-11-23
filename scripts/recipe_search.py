@@ -1,164 +1,174 @@
-# # scripts/recipe_search.py
-# from __future__ import annotations
-# import pandas as pd
-# from ast import literal_eval
-# from typing import List, Tuple
-# from pathlib import Path
-
-# BASE_DIR = Path(__file__).resolve().parents[1]
-
-# def _normalize(s: str) -> str:
-#     return " ".join(s.lower().strip().split())
-
-# def _normalize_list(xs: List[str]) -> List[str]:
-#     return [_normalize(x) for x in xs if isinstance(x, str) and x.strip()]
-
-# def load_recipes(csv_path: str | Path = "data/raw/recipes.csv") -> pd.DataFrame:
-#     """
-#     Loads a Kaggle 'recipe-ingredients-dataset' style CSV.
-
-#     For your file, we expect columns:
-#       - 'ingredients' (a long string: "3 tbsp butter, 2 apples, ...")
-#       - 'recipe_name' (used as display name)
-#     """
-#     p = Path(csv_path)
-
-#     # 🔹 Make relative paths relative to project root (PantryPal/)
-#     if not p.is_absolute():
-#         p = BASE_DIR / p
-
-#     if not p.exists():
-#         # handy fallbacks if you move the file later
-#         for rel in [
-#             "data/raw/recipes.csv",
-#             "data/cleaned/recipes.csv",
-#             "recipes.csv",
-#         ]:
-#             alt = BASE_DIR / rel   # <-- use BASE_DIR here too
-#             if alt.exists():
-#                 p = alt
-#                 break
-#         else:
-#             raise FileNotFoundError(
-#                 f"Could not find recipes CSV. Tried '{csv_path}' "
-#                 f"and default locations under {BASE_DIR}"
-#             )
-
-#     df = pd.read_csv(p)
-
-#     # ----- ingredients: convert big string -> list of tokens -----
-#     def parse_ings(x):
-#         if not isinstance(x, str):
-#             return []
-
-#         x = x.strip()
-
-#         # if it looks like a Python list string -> try literal_eval first
-#         if x.startswith("[") and x.endswith("]"):
-#             try:
-#                 val = literal_eval(x)
-#                 if isinstance(val, list):
-#                     return _normalize_list(val)
-#             except Exception:
-#                 pass
-
-#         # fallback: treat as comma-separated string
-#         parts = [p.strip() for p in x.split(",")]
-#         return _normalize_list(parts)
-
-#     if "ingredients" not in df.columns:
-#         raise ValueError("CSV has no 'ingredients' column – check the file format.")
-
-#     df["ingredients_norm"] = df["ingredients"].apply(parse_ings)
-
-#     # ----- pick a display name -----
-#     name_col = None
-#     for col in ["recipe_name", "title", "name"]:
-#         if col in df.columns:
-#             name_col = col
-#             break
-
-#     if name_col is not None:
-#         df["display_name"] = df[name_col].fillna("").astype(str)
-#     else:
-#         # final fallback: use row index as name
-#         df["display_name"] = df.index.astype(str)
-
-#     return df[["display_name", "ingredients_norm"]].copy()
-
-# def match_recipes(user_ings: List[str], df: pd.DataFrame, top_k: int = 3) -> List[Tuple[str, int, int]]:
-#     """
-#     Simple OR-match scorer:
-
-#       - user_ings: list like ["chicken", "onion", "garlic"]
-#       - for each recipe, we count how many of these words appear as substrings
-#         inside any of the ingredient phrases.
-
-#       score = number of user ingredients that appear in the recipe
-#       returns top_k items as (name, matches, total_recipe_ings)
-#     """
-#     if not user_ings:
-#         return []
-
-#     # normalize user inputs once
-#     user_norm = _normalize_list(user_ings)
-
-#     scores: List[Tuple[str, int, int]] = []
-
-#     for _, row in df.iterrows():
-#         recipe_ings = row["ingredients_norm"]  # list of normalized strings
-
-#         # for each user ingredient, check if it's contained in ANY recipe ingredient string
-#         matches = 0
-#         for u in user_norm:
-#             if any(u in ing for ing in recipe_ings):
-#                 matches += 1
-
-#         if matches > 0:
-#             scores.append((row["display_name"], matches, len(recipe_ings)))
-
-#     # sort: more matches first; tie-breaker = shorter recipe
-#     scores.sort(key=lambda t: (-t[1], t[2]))
-#     return scores[:top_k]
-
-
 # scripts/recipe_search.py
 from __future__ import annotations
-
 from ast import literal_eval
 from pathlib import Path
-from typing import List, Dict
-
+from typing import List, Dict, Set
+import re
 import pandas as pd
 
-# Project root: PantryPal/
+# -------------------------------------------------
+# PATHS
+# -------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parents[1]
 
+# -------------------------------------------------
+# INGREDIENT NORMALISATION & CLEANUP
+# -------------------------------------------------
+ING_STOPWORDS = {
+    # preparation methods
+    "finely", "thinly", "roughly", "freshly", "lightly",
+    "chopped", "sliced", "diced", "minced", "peeled",
+    "seeded", "cored", "grated", "crushed", "julienned",
+    "halved", "quartered", "cubed", "skinless", "softened",
+    "shredded", "beaten", "rinsed", "drained", "mashed",
+    "whisked", "stirred", "boneless", "bone-in",
+    
+    # quantity / units
+    "cup", "cups", "tablespoon", "tablespoons",
+    "teaspoon", "teaspoons", "tbsp", "tsp",
+    "ounce", "ounces", "oz", "pound", "pounds", "lb", "lbs",
+    "gram", "grams", "kg", "kilogram", "kilograms",
+    
+    # size
+    "large", "small", "medium",
+    
+    # quality descriptors - REMOVED preparation methods like dried, smoked, roasted
+    "fresh", "freshly", "extra", "extra-virgin",
+    "low-fat", "fat-free", "reduced", "light",
+    
+    # state/preparation - these should be ignored so "dried tomatoes" = "tomatoes"
+    "dried", "smoked", "roasted", "grilled", "fried", "baked",
+    "toasted", "cooked", "raw",
+    
+    # connectors
+    "and", "or", "with", "without", "of", "in", "for", "to",
+    "taste", "divided", "optional", "recipe", "can", "package",
+}
 
 def _normalize(s: str) -> str:
     """Lowercase + trim + collapse inner spaces."""
     return " ".join(s.lower().strip().split())
 
+def _remove_numbers(text: str) -> str:
+    """Remove integers and simple fractions like 1/2, 3/4."""
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r"\d+\/\d+", " ", text)   # fractions
+    text = re.sub(r"\d+", " ", text)        # whole numbers
+    return text
+
+def _clean_ingredient_to_core(ing: str) -> str:
+    """
+    Extract the CORE ingredient name only.
+    
+    Examples:
+      '1/2 kg skinless chicken' -> 'chicken'
+      'Dried Tomatoes' -> 'tomatoes'
+      'fresh basil leaves' -> 'basil'
+      '3 cloves garlic' -> 'garlic'
+    
+    Returns ONE core ingredient name, not multiple variants.
+    """
+    if not isinstance(ing, str):
+        return ""
+    
+    ing = ing.lower()
+    ing = _remove_numbers(ing)
+    
+    # Remove punctuation but keep spaces
+    ing = re.sub(r"[^\w\s]", " ", ing)
+    ing = re.sub(r"\s+", " ", ing).strip()
+    
+    # Split and filter
+    tokens: List[str] = []
+    for tok in ing.split():
+        # Skip stopwords
+        if tok in ING_STOPWORDS:
+            continue
+        # Keep meaningful words (3+ chars typically)
+        if len(tok) > 2:
+            tokens.append(tok)
+    
+    if not tokens:
+        return ""
+    
+    # Strategy: Take the LAST meaningful word as the core ingredient
+    # This works because ingredient phrases are usually:
+    # [quantity] [preparation] [core_ingredient]
+    # Examples:
+    #   "skinless chicken breast" -> last word = "breast" but we want "chicken"
+    #   "fresh basil" -> last word = "basil" ✓
+    #   "dried tomatoes" -> last word = "tomatoes" ✓
+    
+    # Special handling for common multi-word ingredients
+    phrase = " ".join(tokens)
+    
+    # Handle plurals: tomatoes -> tomato, potatoes -> potato
+    last_word = tokens[-1]
+    if last_word.endswith("oes"):  # tomatoes, potatoes
+        singular = last_word[:-2]
+        return singular
+    elif last_word.endswith("es") and len(last_word) > 4:  # catches some plurals
+        # Be careful: "cheese" shouldn't become "chees"
+        if not last_word.endswith(("eese", "ose")):
+            singular = last_word[:-2]
+            return singular
+    elif last_word.endswith("s") and len(last_word) > 3:
+        # Remove trailing 's' for most plurals
+        # But keep words like "bass", "grass" that naturally end in 's'
+        if not last_word.endswith("ss"):
+            singular = last_word[:-1]
+            return singular
+    
+    return last_word
 
 def _normalize_list(xs: List[str]) -> List[str]:
-    """Apply _normalize to a list and drop empty items."""
-    return [_normalize(x) for x in xs if isinstance(x, str) and x.strip()]
+    """Apply _normalize + dedupe to a list and drop empty items."""
+    normed = []
+    seen = set()
+    for x in xs:
+        if not isinstance(x, str):
+            continue
+        nx = _normalize(x)
+        if not nx:
+            continue
+        if nx in seen:
+            continue
+        seen.add(nx)
+        normed.append(nx)
+    return normed
 
+def _pick_col(df: pd.DataFrame, candidates: List[str]) -> str | None:
+    """Return the first existing column name from candidates, or None."""
+    for name in candidates:
+        if name in df.columns:
+            return name
+    return None
 
+def _extract_grams(text: str, label: str) -> float:
+    """Extract '<number>g' after a label inside the nutrition string."""
+    if not isinstance(text, str):
+        return 0.0
+    pattern = rf"{re.escape(label)}\s+(\d+(\.\d*)?)g"
+    m = re.search(pattern, text)
+    if not m:
+        return 0.0
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return 0.0
+
+# -------------------------------------------------
+# LOAD & PREPARE DATAFRAME
+# -------------------------------------------------
 def load_recipes(csv_path: str | Path) -> pd.DataFrame:
     """
-    Loads your Kaggle-style recipe CSV.
-
-    We expect columns:
-      - 'ingredients'  : long string ("3 tbsp butter, 2 apples, ...")
-      - 'recipe_name'  : recipe title  (or 'title' / 'name' as fallback)
+    Loads your recipe CSV and returns a normalized DataFrame.
+    Each recipe gets a list of CORE ingredient names (one per ingredient).
     """
-    # 1) Resolve the main path relative to project root
     p = Path(csv_path)
     if not p.is_absolute():
         p = BASE_DIR / p
-
-    # 2) Fallback locations if that exact path doesn't exist
     if not p.exists():
         for alt in [
             BASE_DIR / "data/raw/recipes.csv",
@@ -168,136 +178,209 @@ def load_recipes(csv_path: str | Path) -> pd.DataFrame:
             if alt.exists():
                 p = alt
                 break
-
+    
     df = pd.read_csv(p)
-
-    # ----- ingredients: convert big string -> list of tokens -----
+    
     def parse_ings(x):
+        """Parse ingredient list and extract core ingredient names."""
         if not isinstance(x, str):
             return []
-
+        
         x = x.strip()
-
-        # Case 1: looks like "['salt', 'pepper']" → try literal_eval
+        core_ingredients: List[str] = []
+        
+        # Try parsing as Python list
         if x.startswith("[") and x.endswith("]"):
             try:
                 val = literal_eval(x)
                 if isinstance(val, list):
-                    return _normalize_list(val)
+                    for item in val:
+                        core = _clean_ingredient_to_core(item)
+                        if core:
+                            core_ingredients.append(core)
+                    return _normalize_list(core_ingredients)
             except Exception:
                 pass
-
-        # Case 2: treat as comma-separated string
+        
+        # Fallback: comma-separated
         parts = [p.strip() for p in x.split(",")]
-        return _normalize_list(parts)
-
+        for p in parts:
+            core = _clean_ingredient_to_core(p)
+            if core:
+                core_ingredients.append(core)
+        
+        return _normalize_list(core_ingredients)
+    
     if "ingredients" not in df.columns:
-        raise ValueError("CSV has no 'ingredients' column – check the file format.")
-
+        raise ValueError("CSV has no 'ingredients' column")
+    
     df["ingredients_norm"] = df["ingredients"].apply(parse_ings)
-
-    # ----- pick a display name -----
+    
+    # Display name
     name_col = None
     for col in ["recipe_name", "title", "name"]:
         if col in df.columns:
             name_col = col
             break
-
+    
     if name_col is not None:
         df["display_name"] = df[name_col].fillna("").astype(str)
     else:
-        # final fallback: use row index as name
         df["display_name"] = df.index.astype(str)
+    
+    out = df[["display_name", "ingredients_norm"]].copy()
+    
+    # Nutrition parsing
+    if "nutrition" in df.columns:
+        out["protein_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Protein"))
+        out["fat_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Fat"))
+        out["fiber_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Dietary Fiber"))
+        out["sugar_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Sugars"))
+        out["carbs_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Carbohydrate"))
+    else:
+        for col in ["protein_g", "fat_g", "fiber_g", "sugar_g", "carbs_g"]:
+            out[col] = 0.0
+    
+    return out
 
-    return df[["display_name", "ingredients_norm"]].copy()
+# -------------------------------------------------
+# HEALTH SCORE LOGIC
+# -------------------------------------------------
+def _compute_health_score(row: pd.Series) -> float:
+    """Health score in [0,1] based on macros."""
+    protein = float(row.get("protein_g", 0.0) or 0.0)
+    fat = float(row.get("fat_g", 0.0) or 0.0)
+    sugar = float(row.get("sugar_g", 0.0) or 0.0)
+    carbs = float(row.get("carbs_g", 0.0) or 0.0)
+    net_carbs = max(carbs, 0.0)
+    
+    PROTEIN_TARGET = 20.0
+    FAT_LIMIT = 25.0
+    SUGAR_LIMIT = 40.0
+    NET_CARBS_LIMIT = 120.0
+    
+    protein_score = min(protein / PROTEIN_TARGET, 1.0)
+    fat_score = 1.0 - min(fat / FAT_LIMIT, 1.0)
+    sugar_score = 1.0 - min(sugar / SUGAR_LIMIT, 1.0)
+    net_carbs_score = 1.0 - min(net_carbs / NET_CARBS_LIMIT, 1.0)
+    
+    health = (
+        0.40 * protein_score +
+        0.25 * fat_score +
+        0.20 * sugar_score +
+        0.15 * net_carbs_score
+    )
+    return float(max(0.0, min(1.0, health)))
 
-
+# -------------------------------------------------
+# MATCHING LOGIC - FIXED
+# -------------------------------------------------
 def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
     quota: int = 7,
-    hi_thresh: float = 0.7,   # ≥ 70% of *your* ingredients used
-    lo_thresh: float = 0.4,   # ≥ 40% of your ingredients used (for filling quota)
+    hi_thresh: float = 0.5,
+    lo_thresh: float = 0.3,
 ) -> List[Dict]:
     """
-    Quota-based matcher.
-
-    For each recipe we compute:
-      - matches     : how many user ingredients appear (substring match)
-      - pct_recipe  : matches / recipe_size
-      - pct_user    : matches / number_of_user_ingredients
-      - score       : 0.5 * pct_recipe + 0.5 * pct_user
-
-    Then:
-      1) Take recipes with pct_user >= hi_thresh, sorted by score, up to 'quota'.
-      2) If still short, fill with recipes pct_user >= lo_thresh.
-    Returns list of dicts:
-      'name', 'matches', 'pct_recipe', 'pct_user', 'score', 'recipe_size'
+    Match recipes based on core ingredients.
+    
+    Logic:
+    1. User enters: ["Garlic", "Chicken", "Egg", "Tomato"]
+       -> Cleaned to: ["garlic", "chicken", "egg", "tomato"]
+    
+    2. Recipe has: ["1/2 kg skinless chicken", "Dried Tomatoes", "Garlic", "Pepper", "Salt"]
+       -> Cleaned to: ["chicken", "tomato", "garlic", "pepper", "salt"]
+    
+    3. Match calculation:
+       - matches = 3 (chicken, tomato, garlic are in both)
+       - pct_recipe = 3/5 = 60% (3 out of 5 recipe ingredients matched)
+       - pct_user = 3/4 = 75% (3 out of 4 user ingredients used)
     """
     if not user_ings:
         return []
-
-    user_norm_list = _normalize_list(user_ings)
-    user_norm = set(user_norm_list)
-    if not user_norm:
+    
+    # Clean user ingredients to core names
+    user_cores: Set[str] = set()
+    for u in user_ings:
+        core = _clean_ingredient_to_core(u)
+        if core:
+            user_cores.add(core)
+    
+    if not user_cores:
         return []
-
+    
     candidates: List[Dict] = []
-
+    
+    # Score all recipes
     for _, row in df.iterrows():
-        recipe_ings = row["ingredients_norm"]
-        if not recipe_ings:
+        recipe_cores = row["ingredients_norm"]
+        if not recipe_cores:
             continue
-
-        recipe_size = len(recipe_ings)
-
-        # substring-based matching: "chicken" matches "1 lb chicken breast"
-        matches = 0
-        for u in user_norm:
-            if any(u in ing for ing in recipe_ings):
-                matches += 1
-
+        
+        recipe_set = set(recipe_cores)
+        recipe_size = len(recipe_set)
+        
+        # Find intersection
+        matched_ingredients = user_cores & recipe_set
+        matches = len(matched_ingredients)
+        
         if matches == 0:
             continue
-
-        pct_recipe = matches / recipe_size
-        pct_user = matches / len(user_norm)
-        score = 0.5 * pct_recipe + 0.5 * pct_user
-
-        candidates.append(
-            {
-                "name": row["display_name"],
-                "matches": matches,
-                "pct_recipe": pct_recipe,
-                "pct_user": pct_user,
-                "score": score,
-                "recipe_size": recipe_size,
-            }
-        )
-
+        
+        # Calculate percentages
+        pct_recipe = matches / recipe_size if recipe_size > 0 else 0
+        pct_user = matches / len(user_cores) if user_cores else 0
+        
+        # Weighted score: favor recipes that use more of user's ingredients
+        match_score = 0.6 * pct_user + 0.4 * pct_recipe
+        
+        health_score = _compute_health_score(row)
+        
+        candidates.append({
+            "name": row["display_name"],
+            "matches": matches,
+            "pct_recipe": pct_recipe,
+            "pct_user": pct_user,
+            "score": match_score,
+            "recipe_size": recipe_size,
+            "health_score": health_score,
+            "protein_g": float(row.get("protein_g", 0.0) or 0.0),
+            "fat_g": float(row.get("fat_g", 0.0) or 0.0),
+            "sugar_g": float(row.get("sugar_g", 0.0) or 0.0),
+            "carbs_g": float(row.get("carbs_g", 0.0) or 0.0),
+        })
+    
     if not candidates:
         return []
-
-    # sort best → worst; ties broken by shorter recipes
+    
+    # Sort by match score, then by smaller recipe size (simpler recipes first)
     candidates.sort(key=lambda c: (-c["score"], c["recipe_size"]))
-
+    
     selected: List[Dict] = []
-
-    # Pass 1: strong matches based on pct_user
+    
+    # Pass 1: Strong matches (>= 50% of user ingredients used)
     for c in candidates:
         if c["pct_user"] >= hi_thresh:
             selected.append(c)
         if len(selected) >= quota:
             return selected
-
-    # Pass 2: fill remaining quota with okay matches
+    
+    # Pass 2: Okay matches (>= 30% of user ingredients used)
     for c in candidates:
         if c in selected:
             continue
         if c["pct_user"] >= lo_thresh:
             selected.append(c)
         if len(selected) >= quota:
+            return selected
+    
+    # Pass 3: Fill remaining slots with best available
+    for c in candidates:
+        if c in selected:
+            continue
+        selected.append(c)
+        if len(selected) >= quota:
             break
-
+    
     return selected
-
