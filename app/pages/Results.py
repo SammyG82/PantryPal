@@ -299,6 +299,30 @@ if ings:
                     """,
                     unsafe_allow_html=True,
                 )
+                url = rec.get("url", "").strip()
+                if url:
+                    st.markdown(
+                        f"""
+                        <div style="margin-top: 1rem;">
+                            <a href="{url}" target="_blank"
+                            style="
+                                display:inline-block;
+                                padding: 0.45rem 1.1rem;
+                                border-radius: 999px;
+                                background: rgba(255,255,255,0.15);
+                                border: 1px solid rgba(255,255,255,0.35);
+                                font-size: 0.9rem;
+                                font-weight: 600;
+                                color: #ffffff;
+                                text-decoration: none;
+                            ">
+                            View full recipe ↗
+                            </a>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
 
         with col_health:
             st.markdown("""
@@ -338,7 +362,31 @@ if ings:
                     </div>
                     """,
                     unsafe_allow_html=True,
-                )       
+                )
+                url = rec.get("url", "").strip()
+                if url:
+                    st.markdown(
+                        f"""
+                        <div style="margin-top: 1rem;">
+                            <a href="{url}" target="_blank"
+                            style="
+                                display:inline-block;
+                                padding: 0.45rem 1.1rem;
+                                border-radius: 999px;
+                                background: rgba(255,255,255,0.15);
+                                border: 1px solid rgba(255,255,255,0.35);
+                                font-size: 0.9rem;
+                                font-weight: 600;
+                                color: #ffffff;
+                                text-decoration: none;
+                            ">
+                            View full recipe ↗
+                            </a>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+       
 
 else:
     st.info("Type some ingredients on the Home page first.")
