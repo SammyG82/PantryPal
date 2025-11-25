@@ -229,6 +229,13 @@ def load_recipes(csv_path: str | Path) -> pd.DataFrame:
         df["display_name"] = df.index.astype(str)
     
     out = df[["display_name", "ingredients_norm"]].copy()
+    # keep URL if present in the dataset
+    # keep URL if present in the dataset
+    if "url" in df.columns:
+        out["url"] = df["url"].fillna("").astype(str)
+    else:
+        out["url"] = ""
+
     
     # Nutrition parsing
     if "nutrition" in df.columns:
@@ -349,6 +356,7 @@ def match_recipes(
             "fat_g": float(row.get("fat_g", 0.0) or 0.0),
             "sugar_g": float(row.get("sugar_g", 0.0) or 0.0),
             "carbs_g": float(row.get("carbs_g", 0.0) or 0.0),
+            "url":       str(row.get("url", "") or ""),
         })
     
     if not candidates:
