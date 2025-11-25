@@ -19,8 +19,8 @@ venv/
 .ipynb_checkpoints/
 
 # ========== Data ==========
-data/raw/*
 data/cleaned/*
+!data/raw/recipes.csv
 !data/.gitkeep
 !data/nutrition_cache.json
 
