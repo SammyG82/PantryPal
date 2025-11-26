@@ -28,7 +28,7 @@ st.markdown(
 <style>
 /* Gradient background */
 .stApp {
-        background: linear-gradient(135deg, #0a1a2f 0%, #0f2745 100%);
+    background: linear-gradient(135deg, #0a1a2f 0%, #0f2745 100%);
 }
 
 .header-wrap {
@@ -46,6 +46,8 @@ st.markdown(
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
+
+/* Recipe cards */
 .recipe-card {
     margin: 1rem 0; 
     padding: 1.5rem 1.75rem;
@@ -55,7 +57,31 @@ st.markdown(
     backdrop-filter: blur(10px);
     transition: all 0.3s ease;
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
+
+/* Row that holds the two cards so they share height */
+.recipe-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+    margin: 1rem 0 0.5rem 0;
+    align-items: stretch;
+}
+
+/* Stack cards vertically on small screens */
+@media (max-width: 900px) {
+    .recipe-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.recipe-card-footer {
+    margin-top: auto;  /* pushes footer link to bottom */
+}
+
 .recipe-card:hover {
     transform: translateX(8px) translateY(-2px);
     box-shadow: 0 8px 30px rgba(0,0,0,0.2);
@@ -74,6 +100,8 @@ st.markdown(
     font-size: 1.1rem;
     line-height: 1.6;
 }
+
+/* Badges */
 .health-badge {
     display: inline-block; 
     padding: 0.4rem 1.2rem; 
@@ -103,6 +131,8 @@ st.markdown(
     font-style: italic;
     margin-top: 0.75rem;
 }
+
+/* Column headers above each list */
 .column-header {
     background: rgba(255,255,255,0.1);
     padding: 1rem 1.5rem;
@@ -117,7 +147,7 @@ st.markdown(
     font-weight: 700;
 }
 
-/* Button styles */
+/* Buttons */
 .stButton > button {
     padding: 0.75rem 2rem;
     border-radius: 16px;
@@ -148,7 +178,9 @@ p, span, div, li {
 # HEADER
 # -------------------------------------------------
 st.markdown(
-    '<div class="header-wrap"><h1>🥗 Your Recipe Matches</h1><p style="font-size: 1.2rem; color: rgba(255,255,255,0.9); margin-top: 1rem;">Personalized recipes based on your ingredients</p></div>',
+    '<div class="header-wrap"><h1>🥗 Your Recipe Matches</h1>'
+    '<p style="font-size: 1.2rem; color: rgba(255,255,255,0.9); margin-top: 1rem;">'
+    'Personalized recipes based on your ingredients</p></div>',
     unsafe_allow_html=True,
 )
 
@@ -156,7 +188,7 @@ st.markdown(
 # GET SESSION STATE DATA
 # -------------------------------------------------
 imgs = st.session_state.get("images", [])
-ings = st.session_state.get("ingredients", [])
+ings = st.session_state.get("all_ingredients") or st.session_state.get("ingredients", [])
 cooked = st.session_state.get("cooked", False)
 
 if not cooked:
@@ -175,20 +207,24 @@ if not imgs and not ings:
 # SHOW USER INPUTS
 # -------------------------------------------------
 with st.expander("📦 Your ingredients", expanded=True):
-    st.markdown("""
+    st.markdown(
+        """
         <div style="background: rgba(255,255,255,0.05); 
                     padding: 1.5rem; 
                     border-radius: 16px;">
         </div>
-    """, unsafe_allow_html=True)
-    
+        """,
+        unsafe_allow_html=True,
+    )
+
     left, right = st.columns(2)
 
     with left:
         if ings:
             st.markdown("### 📝 Text ingredients:")
             for x in ings:
-                st.markdown(f"""
+                st.markdown(
+                    f"""
                     <div style="background: rgba(255,255,255,0.08); 
                                 padding: 0.5rem 1rem; 
                                 border-radius: 10px; 
@@ -196,7 +232,9 @@ with st.expander("📦 Your ingredients", expanded=True):
                                 display: inline-block;">
                         🥘 {x}
                     </div>
-                """, unsafe_allow_html=True)
+                    """,
+                    unsafe_allow_html=True,
+                )
         else:
             st.write("*No text ingredients provided.*")
 
@@ -228,12 +266,14 @@ def _load_df():
 with st.spinner("🔍 Searching through thousands of recipes..."):
     df = _load_df()
 
-st.markdown("""
+st.markdown(
+    """
     <h2 style="text-align: center; color: #fff; margin: 2rem 0;">
         🎯 Perfect Recipes Just For You
     </h2>
-""", unsafe_allow_html=True)
-
+    """,
+    unsafe_allow_html=True,
+)
 
 # -------------------------------------------------
 # BADGE HELPERS
@@ -268,125 +308,118 @@ if ings:
     if not results:
         st.info("No direct matches found. Try adding more common ingredients ✨")
     else:
-        # Create two columns with headers
-        col_match, col_health = st.columns(2)
+        # Header row: one header per column
+        col_match_header, col_health_header = st.columns(2)
 
-        with col_match:
-            st.markdown("""
+        with col_match_header:
+            st.markdown(
+                """
                 <div class="column-header">
                     <h4>🔍 Best Ingredient Matches</h4>
                 </div>
-            """, unsafe_allow_html=True)
-            
-            for i, rec in enumerate(results, start=1):
-                name = rec["name"]
-                hits = rec["matches"]
-                total = rec["recipe_size"]
-                pct_u = int(rec["pct_user"] * 100)
+                """,
+                unsafe_allow_html=True,
+            )
 
-                label, badge_class = _badge_for_match(rec["pct_user"])
-
-                st.markdown(
-                    f"""
-                    <div class="recipe-card">
-                        <h3>#{i} {name}
-                            <span class="health-badge {badge_class}">{label}</span>
-                        </h3>
-                        <p><b>✅ Matched ingredients:</b> {hits} of {total}</p>
-                        <p><b>📊 Your ingredients used:</b> {pct_u}%</p>
-                        <p class="muted">Ranked by ingredient compatibility</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                url = rec.get("url", "").strip()
-                if url:
-                    st.markdown(
-                        f"""
-                        <div style="margin-top: 1rem;">
-                            <a href="{url}" target="_blank"
-                            style="
-                                display:inline-block;
-                                padding: 0.45rem 1.1rem;
-                                border-radius: 999px;
-                                background: rgba(255,255,255,0.15);
-                                border: 1px solid rgba(255,255,255,0.35);
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                color: #ffffff;
-                                text-decoration: none;
-                            ">
-                            View full recipe ↗
-                            </a>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-
-        with col_health:
-            st.markdown("""
+        with col_health_header:
+            st.markdown(
+                """
                 <div class="column-header">
                     <h4>💚 Healthiest Options</h4>
                 </div>
-            """, unsafe_allow_html=True)
-            
-            by_health = sorted(results, key=lambda r: r["health_score"], reverse=True)
+                """,
+                unsafe_allow_html=True,
+            )
 
-            for i, rec in enumerate(by_health, start=1):
-                name = rec["name"]
-                hscore = rec["health_score"]
-                protein = rec["protein_g"]
-                fat = rec["fat_g"]
-                sugar = rec["sugar_g"]
-                carbs = rec["carbs_g"]
+        # Health column sorted separately
+        by_health = sorted(results, key=lambda r: r["health_score"], reverse=True)
 
-                label, badge_class = _badge_for_health(hscore)
-                pct_h = int(hscore * 100)
+        # Row-by-row layout: each row has one match card + one health card
+        for i in range(len(results)):
+            rec_match = results[i]
+            rec_health = by_health[i]
 
-                st.markdown(
-                    f"""
-                    <div class="recipe-card">
-                        <h3>#{i} {name}
-                            <span class="health-badge {badge_class}">{label}</span>
-                        </h3>
-                        <p><b>💚 Health score:</b> {pct_h}/100</p>
-                        <p><b>🥗 Nutrition per serving:</b></p>
-                        <p style="margin-left: 1rem;">
-                            🥩 Protein: {protein:.1f}g • 
-                            🧈 Fat: {fat:.1f}g<br>
-                            🍬 Sugar: {sugar:.1f}g • 
-                            🍞 Carbs: {carbs:.1f}g
-                        </p>
-                        <p class="muted">Optimized for nutritional value</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+            # ---------- LEFT: ingredient match data ----------
+            name = rec_match["name"]
+            hits = rec_match["matches"]
+            total = rec_match["recipe_size"]
+            pct_u = int(rec_match["pct_user"] * 100)
+
+            label, badge_class = _badge_for_match(rec_match["pct_user"])
+            url = rec_match.get("url", "").strip()
+
+            link_html = ""
+            if url:
+                link_html = (
+                    f'<div class="recipe-card-footer">'
+                    f'<a href="{url}" target="_blank" '
+                    'style="display:inline-block; padding: 0.45rem 1.1rem; '
+                    'border-radius: 999px; background: rgba(255,255,255,0.15); '
+                    'border: 1px solid rgba(255,255,255,0.35); font-size: 0.9rem; '
+                    'font-weight: 600; color: #ffffff; text-decoration: none;">'
+                    'View full recipe ↗'
+                    '</a>'
+                    '</div>'
                 )
-                url = rec.get("url", "").strip()
-                if url:
-                    st.markdown(
-                        f"""
-                        <div style="margin-top: 1rem;">
-                            <a href="{url}" target="_blank"
-                            style="
-                                display:inline-block;
-                                padding: 0.45rem 1.1rem;
-                                border-radius: 999px;
-                                background: rgba(255,255,255,0.15);
-                                border: 1px solid rgba(255,255,255,0.35);
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                color: #ffffff;
-                                text-decoration: none;
-                            ">
-                            View full recipe ↗
-                            </a>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-       
+
+            # ---------- RIGHT: health-score data ----------
+            name_h = rec_health["name"]
+            hscore = rec_health["health_score"]
+            protein = rec_health["protein_g"]
+            fat = rec_health["fat_g"]
+            sugar = rec_health["sugar_g"]
+            carbs = rec_health["carbs_g"]
+
+            label_h, badge_class_h = _badge_for_health(hscore)
+            pct_h = int(hscore * 100)
+            url_h = rec_health.get("url", "").strip()
+
+            link_html_h = ""
+            if url_h:
+                link_html_h = (
+                    f'<div class="recipe-card-footer">'
+                    f'<a href="{url_h}" target="_blank" '
+                    'style="display:inline-block; padding: 0.45rem 1.1rem; '
+                    'border-radius: 999px; background: rgba(255,255,255,0.15); '
+                    'border: 1px solid rgba(255,255,255,0.35); font-size: 0.9rem; '
+                    'font-weight: 600; color: #ffffff; text-decoration: none;">'
+                    'View full recipe ↗'
+                    '</a>'
+                    '</div>'
+                )
+
+            # ---------- FULL ROW HTML (two cards side by side) ----------
+            row_html = f"""
+<div class="recipe-row">
+  <div class="recipe-card">
+    <h3>#{i+1} {name}
+        <span class="health-badge {badge_class}">{label}</span>
+    </h3>
+    <p><b>✅ Matched ingredients:</b> {hits} of {total}</p>
+    <p><b>📊 Your ingredients used:</b> {pct_u}%</p>
+    <p class="muted">Ranked by ingredient compatibility</p>
+    {link_html}
+  </div>
+
+  <div class="recipe-card">
+    <h3>#{i+1} {name_h}
+        <span class="health-badge {badge_class_h}">{label_h}</span>
+    </h3>
+    <p><b>💚 Health score:</b> {pct_h}/100</p>
+    <p><b>🥗 Nutrition per serving:</b></p>
+    <p style="margin-left: 1rem;">
+        🥩 Protein: {protein:.1f}g • 
+        🧈 Fat: {fat:.1f}g<br>
+        🍬 Sugar: {sugar:.1f}g • 
+        🍞 Carbs: {carbs:.1f}g
+    </p>
+    <p class="muted">Optimized for nutritional value</p>
+    {link_html_h}
+  </div>
+</div>
+"""
+
+            st.markdown(row_html, unsafe_allow_html=True)
 
 else:
     st.info("Type some ingredients on the Home page first.")
@@ -408,9 +441,10 @@ with col3:
     if st.button("🔄 Start Fresh", use_container_width=True, type="primary"):
         st.session_state.ingredients = []
         st.session_state.images = []
+        st.session_state.all_ingredients = []
         st.session_state.cooked = False
         st.session_state.uploader_key += 1
-        st.success("✨ Reset! Starting fresh...")
+        st.success("Reset! Starting fresh...")
         import time
         time.sleep(1)
         st.switch_page("Home.py")

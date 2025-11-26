@@ -35,8 +35,32 @@ def render_cook_button():
             else:
                 with st.spinner("👨‍🍳 Finding amazing recipes for you..."):
                     import time
-                    time.sleep(0.5)  # Small delay for effect
+                    time.sleep(0.5)
+
+                    # ---- Build combined ingredient list for searching ----
+                    base_ings = list(st.session_state.get("ingredients", []))
+
+                    image_ings = []
+                    for img in st.session_state.get("images", []):
+                        pred = (img.get("prediction") or "").strip()
+                        if pred:
+                            image_ings.append(pred)
+
+                    # Merge + dedupe while preserving order
+                    combined = []
+                    seen = set()
+                    for item in base_ings + image_ings:
+                        norm = item.strip()
+                        if not norm:
+                            continue
+                        key = norm.lower()
+                        if key not in seen:
+                            seen.add(key)
+                            combined.append(norm)
+
+                    st.session_state.all_ingredients = combined
                     st.session_state.cooked = True
                     st.switch_page("pages/Results.py")
+
     
     st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing

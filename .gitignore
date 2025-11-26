@@ -25,8 +25,11 @@ data/cleaned/*
 !data/nutrition_cache.json
 
 # ========== Models ==========
-models/*
-!models/.gitkeep
+# ========== Models ==========
+model/*
+!model/.gitkeep
+!model/Food_Recognition_Model.pt
+!model/label_map.json
 
 # ========== System ==========
 .DS_Store

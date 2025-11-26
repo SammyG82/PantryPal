@@ -1,4 +1,10 @@
 streamlit
 pandas
-timm 
+numpy
+Pillow
+
 torch
+torchvision
+timm
+
+scikit-learn
