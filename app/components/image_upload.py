@@ -32,6 +32,31 @@ def render_image_uploader():
 
     # We treat the uploader ONLY as an input source.
     # We do NOT rely on its little "x" delete icons for state.
+    # if uploaded:
+    #     # Build a simple "signature" of the current uploader contents
+    #     file_sig = [(f.name, getattr(f, "size", None)) for f in uploaded]
+
+    #     # Only rebuild images if the uploader selection actually changed
+    #     if st.session_state.uploader_files_sig != file_sig:
+    #         new_images = []
+    #         for file in uploaded:
+    #             data = file.read()
+    #             img_info = {"name": file.name, "bytes": data}
+
+    #             # Run model prediction once per image
+    #             try:
+    #                 pil_img = Image.open(io.BytesIO(data))
+    #                 pred = predict_image(pil_img)
+    #                 img_info["prediction"] = pred
+    #             except Exception:
+    #                 img_info["prediction"] = None
+
+    #             new_images.append(img_info)
+
+    #         # Replace current images with this selection
+    #         st.session_state.images = new_images
+    #         st.session_state.uploader_files_sig = file_sig
+
     if uploaded:
         # Build a simple "signature" of the current uploader contents
         file_sig = [(f.name, getattr(f, "size", None)) for f in uploaded]
@@ -39,7 +64,15 @@ def render_image_uploader():
         # Only rebuild images if the uploader selection actually changed
         if st.session_state.uploader_files_sig != file_sig:
             new_images = []
+            seen_files = set()  # <-- NEW: track (name, size) pairs
+
             for file in uploaded:
+                key = (file.name, getattr(file, "size", None))
+                if key in seen_files:
+                    # skip exact duplicate files in this upload
+                    continue
+                seen_files.add(key)
+
                 data = file.read()
                 img_info = {"name": file.name, "bytes": data}
 
@@ -56,6 +89,7 @@ def render_image_uploader():
             # Replace current images with this selection
             st.session_state.images = new_images
             st.session_state.uploader_files_sig = file_sig
+
 
 
     images = st.session_state.images

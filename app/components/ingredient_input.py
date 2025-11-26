@@ -131,14 +131,30 @@ def render_ingredient_input():
                 type="primary",
             )
 
+        # if submitted:
+        #     txt = (text_value or "").strip()
+        #     if not txt:
+        #         st.session_state.ingredient_warning = "Please input an ingredient"
+        #     else:
+        #         # Add to the ingredients list
+        #         st.session_state.ingredients.append(txt)
+        #         st.session_state.ingredient_warning = None
+
         if submitted:
             txt = (text_value or "").strip()
             if not txt:
                 st.session_state.ingredient_warning = "Please input an ingredient"
             else:
-                # Add to the ingredients list
-                st.session_state.ingredients.append(txt)
-                st.session_state.ingredient_warning = None
+                # --- simple duplicate check (case-insensitive) ---
+                new_norm = txt.lower()
+                existing_norm = {ing.strip().lower() for ing in st.session_state.ingredients}
+
+                if new_norm in existing_norm:
+                    st.session_state.ingredient_warning = "You've already added that ingredient"
+                else:
+                    st.session_state.ingredients.append(txt)
+                    st.session_state.ingredient_warning = None
+
 
     # Display warning message below the input if needed
     if st.session_state.get("ingredient_warning"):
