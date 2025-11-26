@@ -20,6 +20,7 @@ defaults = {
     "entry_key": 0,
     "cooked": False,
     "ingredient_warning": None,
+    "all_ingredients": [],  
 }
 
 for k, v in defaults.items():
