@@ -1,3 +1,6 @@
+
+
+
 # scripts/recipe_search.py
 from __future__ import annotations
 from ast import literal_eval
@@ -5,6 +8,8 @@ from pathlib import Path
 from typing import List, Dict, Set
 import re
 import pandas as pd
+from rapidfuzz import fuzz
+
 
 # -------------------------------------------------
 # PATHS
@@ -43,6 +48,11 @@ ING_STOPWORDS = {
     # connectors
     "and", "or", "with", "without", "of", "in", "for", "to",
     "taste", "divided", "optional", "recipe", "can", "package",
+
+    "salt", "pepper", "peppers", "water",
+    "oil", "olive", "olive-oil", "canola", "vegetable",
+    "sugar", "flour",
+    "broth", "stock",
 }
 
 def _normalize(s: str) -> str:
@@ -56,6 +66,14 @@ def _remove_numbers(text: str) -> str:
     text = re.sub(r"\d+\/\d+", " ", text)   # fractions
     text = re.sub(r"\d+", " ", text)        # whole numbers
     return text
+
+MEAT_TOKENS = {
+    "chicken", "beef", "pork", "lamb", "goat", "turkey",
+    "duck", "goose", "fish", "salmon", "tilapia", "tuna",
+    "shrimp", "prawn", "prawns", "scallops", "bacon",
+    "sausage", "ham"
+}
+
 
 def _clean_ingredient_to_core(ing: str) -> str:
     """
@@ -79,48 +97,37 @@ def _clean_ingredient_to_core(ing: str) -> str:
     ing = re.sub(r"[^\w\s]", " ", ing)
     ing = re.sub(r"\s+", " ", ing).strip()
     
-    # Split and filter
     tokens: List[str] = []
     for tok in ing.split():
-        # Skip stopwords
         if tok in ING_STOPWORDS:
             continue
-        # Keep meaningful words (3+ chars typically)
         if len(tok) > 2:
             tokens.append(tok)
-    
+
     if not tokens:
         return ""
-    
-    # Strategy: Take the LAST meaningful word as the core ingredient
-    # This works because ingredient phrases are usually:
-    # [quantity] [preparation] [core_ingredient]
-    # Examples:
-    #   "skinless chicken breast" -> last word = "breast" but we want "chicken"
-    #   "fresh basil" -> last word = "basil" ✓
-    #   "dried tomatoes" -> last word = "tomatoes" ✓
-    
-    # Special handling for common multi-word ingredients
-    phrase = " ".join(tokens)
-    
-    # Handle plurals: tomatoes -> tomato, potatoes -> potato
+
+    # --- NEW: if any token is a meat/fish keyword, return that ---
+    for tok in tokens:
+        if tok in MEAT_TOKENS:
+            return tok
+
+    # (optional) you could also do something similar for "olive oil",
+    # "soy sauce", etc. later
+
+    # --- OLD plural handling & last-word fallback ---
     last_word = tokens[-1]
-    if last_word.endswith("oes"):  # tomatoes, potatoes
-        singular = last_word[:-2]
-        return singular
-    elif last_word.endswith("es") and len(last_word) > 4:  # catches some plurals
-        # Be careful: "cheese" shouldn't become "chees"
+    if last_word.endswith("oes"):
+        return last_word[:-2]
+    elif last_word.endswith("es") and len(last_word) > 4:
         if not last_word.endswith(("eese", "ose")):
-            singular = last_word[:-2]
-            return singular
+            return last_word[:-2]
     elif last_word.endswith("s") and len(last_word) > 3:
-        # Remove trailing 's' for most plurals
-        # But keep words like "bass", "grass" that naturally end in 's'
         if not last_word.endswith("ss"):
-            singular = last_word[:-1]
-            return singular
-    
+            return last_word[:-1]
+
     return last_word
+
 
 def _normalize_list(xs: List[str]) -> List[str]:
     """Apply _normalize + dedupe to a list and drop empty items."""
@@ -279,116 +286,152 @@ def _compute_health_score(row: pd.Series) -> float:
     )
     return float(max(0.0, min(1.0, health)))
 
+
+def _fuzzy_intersection(
+    user_cores: Set[str],
+    recipe_cores: Set[str],
+    threshold: float = 0.82,
+) -> Set[str]:
+    """
+    Greedy 1–1 fuzzy matching between user ingredient cores and recipe cores.
+
+    - Uses exact matches first.
+    - Then uses fuzzy matches (RapidFuzz token_set_ratio).
+    - Returns the set of recipe-side cores that matched.
+    """
+    if not user_cores or not recipe_cores:
+        return set()
+
+    recipe_set: Set[str] = set(recipe_cores)
+
+    # 1) Exact matches first
+    exact = user_cores & recipe_set
+    matches: Set[str] = set(exact)
+    used_recipe: Set[str] = set(exact)
+
+    remaining_user = user_cores - exact
+    remaining_recipe = recipe_set - used_recipe
+
+    # 2) Fuzzy matches for remaining items
+    for u in remaining_user:
+        best_r = None
+        best_score = 0.0
+
+        for r in list(remaining_recipe):
+            # token_set_ratio is robust to small differences / word order
+            score = fuzz.token_set_ratio(u, r) / 100.0
+            if score > best_score:
+                best_score = score
+                best_r = r
+
+        if best_r is not None and best_score >= threshold:
+            matches.add(best_r)
+            remaining_recipe.remove(best_r)
+
+    return matches
+
+
 # -------------------------------------------------
 # MATCHING LOGIC - FIXED
+# -------------------------------------------------
+# -------------------------------------------------
+# MATCHING LOGIC - JACCARD + SIMPLER PASS SYSTEM
 # -------------------------------------------------
 def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
     quota: int = 7,
-    hi_thresh: float = 0.5,
-    lo_thresh: float = 0.3,
+    hi_thresh: float = 0.5,  # kept for backwards compatibility (unused)
+    lo_thresh: float = 0.3,  # kept for backwards compatibility (unused)
 ) -> List[Dict]:
     """
     Match recipes based on core ingredients.
-    
-    Logic:
-    1. User enters: ["Garlic", "Chicken", "Egg", "Tomato"]
-       -> Cleaned to: ["garlic", "chicken", "egg", "tomato"]
-    
-    2. Recipe has: ["1/2 kg skinless chicken", "Dried Tomatoes", "Garlic", "Pepper", "Salt"]
-       -> Cleaned to: ["chicken", "tomato", "garlic", "pepper", "salt"]
-    
-    3. Match calculation:
-       - matches = 3 (chicken, tomato, garlic are in both)
-       - pct_recipe = 3/5 = 60% (3 out of 5 recipe ingredients matched)
-       - pct_user = 3/4 = 75% (3 out of 4 user ingredients used)
+
+    Uses:
+      - fuzzy 1–1 matching between user + recipe cores
+      - pct_recipe  = matches / |recipe_cores|
+      - Jaccard     = matches / |user_cores ∪ recipe_cores|
+      - final score = 0.7 * pct_recipe + 0.3 * Jaccard
+
+    Then simply returns the top `quota` recipes by score.
     """
     if not user_ings:
         return []
-    
+
     # Clean user ingredients to core names
     user_cores: Set[str] = set()
     for u in user_ings:
         core = _clean_ingredient_to_core(u)
         if core:
             user_cores.add(core)
-    
+
     if not user_cores:
         return []
-    
+
     candidates: List[Dict] = []
-    
+
     # Score all recipes
     for _, row in df.iterrows():
         recipe_cores = row["ingredients_norm"]
         if not recipe_cores:
             continue
-        
+
         recipe_set = set(recipe_cores)
         recipe_size = len(recipe_set)
-        
-        # Find intersection
-        matched_ingredients = user_cores & recipe_set
+
+        if recipe_size <= 1:
+            continue
+
+        # Fuzzy + exact intersection → recipe-side matched cores
+        matched_ingredients = _fuzzy_intersection(
+            user_cores=user_cores,
+            recipe_cores=recipe_set,
+            threshold=0.82,   # same threshold as before
+        )
         matches = len(matched_ingredients)
-        
+
         if matches == 0:
             continue
-        
-        # Calculate percentages
-        pct_recipe = matches / recipe_size if recipe_size > 0 else 0
-        pct_user = matches / len(user_cores) if user_cores else 0
-        
-        # Weighted score: favor recipes that use more of user's ingredients
-        match_score = 0.6 * pct_user + 0.4 * pct_recipe
-        
+
+        # Percent of the recipe you can actually cook
+        pct_recipe = matches / recipe_size if recipe_size > 0 else 0.0
+
+        # Percent of your list that got used (still useful for display)
+        pct_user = matches / len(user_cores) if user_cores else 0.0
+
+        # Jaccard similarity between user + recipe ingredient sets
+        union_size = len(user_cores | recipe_set)
+        jaccard = matches / union_size if union_size > 0 else 0.0
+
+        # Final match score: emphasize "how complete is this recipe"
+        match_score = 0.7 * pct_recipe + 0.3 * jaccard
+
         health_score = _compute_health_score(row)
-        
+
         candidates.append({
-            "name": row["display_name"],
-            "matches": matches,
-            "pct_recipe": pct_recipe,
-            "pct_user": pct_user,
-            "score": match_score,
-            "recipe_size": recipe_size,
+            "name":         row["display_name"],
+            "matches":      matches,
+            "pct_recipe":   pct_recipe,
+            "pct_user":     pct_user,
+            "score":        match_score,
+            "jaccard":      jaccard,
+            "recipe_size":  recipe_size,
             "health_score": health_score,
-            "protein_g": float(row.get("protein_g", 0.0) or 0.0),
-            "fat_g": float(row.get("fat_g", 0.0) or 0.0),
-            "sugar_g": float(row.get("sugar_g", 0.0) or 0.0),
-            "carbs_g": float(row.get("carbs_g", 0.0) or 0.0),
-            "url":       str(row.get("url", "") or ""),
+            "protein_g":    float(row.get("protein_g", 0.0) or 0.0),
+            "fat_g":        float(row.get("fat_g", 0.0) or 0.0),
+            "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
+            "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
+            "url":          str(row.get("url", "") or ""),
+            # for debugging / potential UI use
+            "matched_cores": sorted(matched_ingredients),
+            "user_cores":    sorted(user_cores),
         })
-    
+
     if not candidates:
         return []
-    
-    # Sort by match score, then by smaller recipe size (simpler recipes first)
+
+    # Sort by score, then by smaller recipe size (simpler recipes first)
     candidates.sort(key=lambda c: (-c["score"], c["recipe_size"]))
-    
-    selected: List[Dict] = []
-    
-    # Pass 1: Strong matches (>= 50% of user ingredients used)
-    for c in candidates:
-        if c["pct_user"] >= hi_thresh:
-            selected.append(c)
-        if len(selected) >= quota:
-            return selected
-    
-    # Pass 2: Okay matches (>= 30% of user ingredients used)
-    for c in candidates:
-        if c in selected:
-            continue
-        if c["pct_user"] >= lo_thresh:
-            selected.append(c)
-        if len(selected) >= quota:
-            return selected
-    
-    # Pass 3: Fill remaining slots with best available
-    for c in candidates:
-        if c in selected:
-            continue
-        selected.append(c)
-        if len(selected) >= quota:
-            break
-    
-    return selected
+
+    # NEW: just take the top-K; no multi-pass quota filling
+    return candidates[:quota]
