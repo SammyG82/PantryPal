@@ -12,8 +12,10 @@ def apply_styles():
     
     /* Main app background */
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #0a1a2f 0%, #0f2745 100%);
     }
+
+                
     
     /* ---------- HOME PAGE HEADER ---------- */
     .header-wrap {

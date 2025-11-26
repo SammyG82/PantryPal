@@ -1,6 +1,10 @@
 import streamlit as st
+from utils.helpers import process_uploaded_files
 from PIL import Image
 import io
+
+from utils.image_predict import predict_image  # ⬅️ NEW
+
 
 def render_image_uploader():
     st.markdown("""
@@ -47,26 +51,50 @@ def render_image_uploader():
         cols = st.columns(2)
         for idx, img_data in enumerate(st.session_state.images):
             with cols[idx % 2]:
-                # Create a nice card for each image
                 with st.container():
-                    st.markdown(f"""
+                    st.markdown("""
                         <div class="preview-card">
                             <style>
-                                .preview-card img {{
+                                .preview-card img {
                                     border-radius: 12px;
                                     width: 100%;
                                     height: auto;
-                                }}
+                                }
                             </style>
                         </div>
                     """, unsafe_allow_html=True)
-                    
+
                     # Display the image
                     try:
                         image = Image.open(io.BytesIO(img_data["bytes"]))
-                        st.image(image, caption=f"📷 {img_data['name']}", use_container_width=True)
+                        st.image(
+                            image,
+                            caption=f"📷 {img_data['name']}",
+                            use_container_width=True
+                        )
+
+                        # 🔮 NEW — RUN MODEL PREDICTION
+                        try:
+                            prediction = predict_image(image)
+                            img_data["prediction"] = prediction  # store it
+
+                            st.markdown(
+                                f"<p><b>Detected ingredient:</b> {prediction}</p>",
+                                unsafe_allow_html=True
+                            )
+
+                            # OPTIONAL: auto-add prediction to ingredients
+                            if "ingredients" not in st.session_state:
+                                st.session_state["ingredients"] = []
+                            if prediction not in st.session_state["ingredients"]:
+                                st.session_state["ingredients"].append(prediction)
+
+                        except Exception as e:
+                            st.caption(f"Prediction error: {e}")
+
                     except:
                         st.error(f"Could not display {img_data['name']}")
+
         
         st.markdown("<br>", unsafe_allow_html=True)
         
