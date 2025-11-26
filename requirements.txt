@@ -8,3 +8,4 @@ torchvision
 timm
 
 scikit-learn
+rapidfuzz

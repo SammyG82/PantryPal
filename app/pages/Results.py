@@ -122,7 +122,7 @@ st.markdown(
     color: #fff;
 }
 .badge-cheat {
-    background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); 
+    background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
     color: #fff;
 }
 .muted {
@@ -278,15 +278,29 @@ st.markdown(
 # -------------------------------------------------
 # BADGE HELPERS
 # -------------------------------------------------
-def _badge_for_match(pct_user: float):
-    """Badge for ingredient-match quality (how much of *your* list is used)."""
-    pct = pct_user * 100
-    if pct >= 70:
+def _badge_for_match(
+    pct_user: float,
+    pct_recipe: float,
+    jaccard: float,
+    recipe_size: int,
+    matches: int,
+):
+    u = pct_user * 100.0
+    r = pct_recipe * 100.0
+
+    # STRONG: we cover a big chunk of the recipe and have at least 3 overlaps
+    if matches >= 3 and r >= 50:
         return "💚 Strong Match", "badge-healthy"
-    elif pct >= 40:
+
+    # GOOD: at least 2 overlaps and >30% of the recipe covered
+    if matches >= 2 and r >= 30:
         return "✨ Good Match", "badge-balanced"
-    else:
-        return "🔍 Partial Match", "badge-cheat"
+
+    # Otherwise: partial
+    return "🔍 Uses some of your ingredients", "badge-cheat"
+
+
+
 
 
 def _badge_for_health(score: float):
@@ -344,8 +358,20 @@ if ings:
             hits = rec_match["matches"]
             total = rec_match["recipe_size"]
             pct_u = int(rec_match["pct_user"] * 100)
+            pct_r = int(rec_match["pct_recipe"] * 100)
 
-            label, badge_class = _badge_for_match(rec_match["pct_user"])
+            matched_core_list = ", ".join(rec_match.get("matched_cores", []))
+
+            jaccard = rec_match.get("jaccard", rec_match["pct_user"])
+            label, badge_class = _badge_for_match(
+                pct_user=rec_match["pct_user"],
+                pct_recipe=rec_match["pct_recipe"],
+                jaccard=rec_match.get("jaccard", 0.0),   # safe even if field missing
+                recipe_size=rec_match["recipe_size"],
+                matches=rec_match["matches"],
+            )
+
+
             url = rec_match.get("url", "").strip()
 
             link_html = ""
@@ -397,6 +423,7 @@ if ings:
     </h3>
     <p><b>✅ Matched ingredients:</b> {hits} of {total}</p>
     <p><b>📊 Your ingredients used:</b> {pct_u}%</p>
+    <p><b>📊 Recipe ingredients covered:</b> {pct_r}%</p>
     <p class="muted">Ranked by ingredient compatibility</p>
     {link_html}
   </div>
