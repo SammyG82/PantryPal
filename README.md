@@ -5,13 +5,13 @@ PantryPal is a web app that suggests recipes based on the ingredients you alread
 It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info**.
 ---
 
-## 🧭 Project Overview  
+## Project Overview  
 
 > **Goal:** Recommend recipes using a combination of text input, image recognition, and smart fuzzy ingredient matching.
 
 ### Core Features  
 - Text-based ingredient input  
-- Image-based ingredient detection (MobileNetV3)  
+- Image-based ingredient detection (EfficientNetB0)  
 - Fuzzy ingredient matching (e.g., `chopped onions` ≈ `onions`)  
 - Fuzzy recipe matching based on overlap score
 - Nutrition based ranking
@@ -25,7 +25,7 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 | Component | Technology |
 |------------|-------------|
 | **Frontend/UI** | Streamlit |
-| **Image Recognition** | PyTorch (MobileNetV3 fine-tuned), OpenCV for image preprocessing |
+| **Image Recognition** | PyTorch (EfficientNetB0 fine-tuned), OpenCV for image preprocessing |
 | **Pre Processing** | Pillow (PIL), NumPy |
 | **Matching Logic** | Python, pandas, rapidfuzz difflib, scikit-learn |
 | **Deployment** | Streamlit Cloud |
@@ -33,7 +33,7 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 
 ---
 
-## 🧠 Workflow  
+## Workflow  
 
 1. **User Input:**  
    - Add text ingredients
@@ -42,7 +42,7 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
    - Each item has a delete button in the UI
 2. **Ingredient Normalization:**  
    - Text cleanup “chopped tomato” → “tomato”
-   - CNN image inference (MobileNetV3 → ingredient label)
+   - CNN image inference (EfficientNetB0 → ingredient label)
    - Maintains a unified backend list of all detected/typed items
 3. **Recipe Matching:**  
    - Searches through recipes.csv
@@ -64,7 +64,7 @@ PantryPal/
 │   │   └── ingredient_input.py           # Text input component for ingredients
 │   │
 │   ├── model/                            # Image recognition model assets
-│   │   ├── Food_Recognition_Model.pt     # Trained MobileNetV3 model
+│   │   ├── Food_Recognition_Model.pt     # Trained EfficientNetB0 model
 │   │   └── label_map.json                # Maps model outputs → ingredient names
 │   │
 │   ├── pages/
