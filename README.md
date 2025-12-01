@@ -1,34 +1,34 @@
 # 🥕 PantryPal  
 ### *Your Smart Recipe Recommender Based on What’s in Your Kitchen!*  
 
-PantryPal is a web platform that suggests recipes based on the ingredients you already have — whether you **type them in** or **upload a photo** of your pantry.  
-It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info** and **dietary filters**.
-
+PantryPal is a web app that suggests recipes based on the ingredients you already have — whether you **type them in** or **upload a photo** of your pantry.  
+It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info**.
 ---
 
 ## 🧭 Project Overview  
 
-> **Goal:** Suggest recipes based on typed ingredients or a photo of the user’s pantry.
+> **Goal:** Recommend recipes using a combination of text input, image recognition, and smart fuzzy ingredient matching.
 
-### 🌟 Core Features  
-- 📝 Text-based ingredient input  
-- 🖼️ Image-based ingredient detection (CNN model)  
-- 🧮 Fuzzy ingredient matching (e.g., `onions` ≈ `chopped onions`)  
-- 🥗 Dietary filters: vegan, vegetarian, gluten-free  
-- 🍎 Nutrition info integration via USDA FoodData Central API  
-- 🌐 Web interface using Streamlit  
+### Core Features  
+- Text-based ingredient input  
+- Image-based ingredient detection (MobileNetV3)  
+- Fuzzy ingredient matching (e.g., `chopped onions` ≈ `onions`)  
+- Fuzzy recipe matching based on overlap score
+- Nutrition based ranking
+- Duplicate image/text handling & simple delete actions
+- Web interface using Streamlit  
 
 ---
 
-## 🧰 Tech Stack  
+## Tech Stack  
 
 | Component | Technology |
 |------------|-------------|
 | **Frontend/UI** | Streamlit |
-| **Image Recognition** | PyTorch (MobileNetV2 fine-tuned), OpenCV for image preprocessing |
-| **Matching Logic** | Python, pandas, difflib, scikit-learn |
-| **Nutrition API** | USDA FoodData Central API |
-| **Deployment** | Streamlit Cloud / Heroku |
+| **Image Recognition** | PyTorch (MobileNetV3 fine-tuned), OpenCV for image preprocessing |
+| **Pre Processing** | Pillow (PIL), NumPy |
+| **Matching Logic** | Python, pandas, rapidfuzz difflib, scikit-learn |
+| **Deployment** | Streamlit Cloud |
 | **Version Control** | Git + GitHub (branches, issues, PRs) |
 
 ---
@@ -36,20 +36,62 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 ## 🧠 Workflow  
 
 1. **User Input:**  
-   - Text: `"tomato, onion, garlic"` and input is automatically formatted `"toMATo" -> "Tomato"`   
-   - Image upload: Upload multiple images(max size 200 MB per image)
-   - Any duplicate text entries or images will be automatically ignored
-   - Straightforward "delete" button for each individual entry(image/text)
+   - Add text ingredients
+   - Upload multiple images (max 200MB each)
+   - Duplicate items (img/text) automatically ignored
+   - Each item has a delete button in the UI
 2. **Ingredient Normalization:**  
-   - Converts “chopped tomato” → “tomato”
-   - Performs image recognition and identifies each image(pic of tomato -> "tomato")
-   - Maintains a list in the backend of each item entered(image/text)  
+   - Text cleanup “chopped tomato” → “tomato”
+   - CNN image inference (MobileNetV3 → ingredient label)
+   - Maintains a unified backend list of all detected/typed items
 3. **Recipe Matching:**  
-   - Uses the list created to find recipes with the highest overlap by running a search algorithm
-   - Once all matches are made, each recipe is ranked by nutrition
-4. **Filters & Nutrition:**  
-   - Applies dietary filters and shows nutrition info  
-5. **Output:**  
-   - Sorted recipe list with match %, nutrition info, and tags (e.g., 🥦 Vegan, 💪 High Protein)  
-   - Most nutritional at the top and least nutritional at the bottom
+   - Searches through recipes.csv
+   - Computes fuzzy similarity for each ingredient
+   - Calculates match score + nutrition score
+4. **Ranking & Display:**  
+   - Recipes sorted by match % and nutrition
+   - Displays key details; score breakdown and link to recipe
 
+
+
+
+```
+PantryPal/
+├── app/                                  # Main Streamlit application
+│   ├── components/                       # Reusable UI building blocks
+│   │   ├── cook_button.py                # "Cook!" CTA button component
+│   │   ├── image_upload.py               # Image upload component
+│   │   └── ingredient_input.py           # Text input component for ingredients
+│   │
+│   ├── model/                            # Image recognition model assets
+│   │   ├── Food_Recognition_Model.pt     # Trained MobileNetV3 model
+│   │   └── label_map.json                # Maps model outputs → ingredient names
+│   │
+│   ├── pages/
+│   │   └── Results.py                    # Results and recipe display page
+│   │
+│   ├── utils/                            # Backend logic & helper functions
+│   │   ├── helpers.py                    # General utils (normalization, cleaning)
+│   │   ├── image_predict.py              # CNN inference for image uploads
+│   │   ├── Home.py                       # Streamlit home routing
+│   │   └── styles.py                     # CSS + UI styling utilities
+│
+├── data/
+│   ├── cleaned/                          # Cleaned datasets (future use)
+│   └── raw/
+│       └── recipes.csv                   # Main recipe dataset (ingredients + nutrition)
+│
+├── models/
+│   └── mobilenet_head.pt                 # Additional model head weights (if used)
+│
+├── notebooks/
+│   └── dataset_exploration.ipynb         # Exploratory analysis notebook
+│
+├── scripts/
+│   └── recipe_search.py                  # Fuzzy matching + ranking algorithm
+│
+├── venv/                                 # Virtual environment (ignored in repo)
+├── requirements.txt                      # Python dependencies
+├── .gitignore                            # Git ignore rules
+└── README.md                             # Project documentation
+```
