@@ -13,7 +13,7 @@
 | Component | Technology |
 |------------|-------------|
 | **Frontend/UI** | Streamlit |
-| **Image Recognition** | PyTorch (EfficientNetB0 fine-tuned) |
+| **Image Recognition** | PyTorch, Torchvision (EfficientNetB0 fine-tuned) |
 | **Pre Processing** | Pillow (PIL), NumPy |
 | **Matching Logic** | Python, pandas, rapidfuzz |
 | **Deployment** | Streamlit Cloud |
@@ -72,17 +72,14 @@ PantryPal/
 │   │
 │   ├── utils/                            # Backend logic & helper functions
 │   │   ├── helpers.py                    # General utils (normalization, cleaning)
-│   │   ├── image_predict.py              # CNN inference for image uploads
-│   │   ├── Home.py                       # Streamlit home routing
-│   │   └── styles.py                     # CSS + UI styling utilities
+│   │   └── image_predict.py              # CNN inference for image uploads
+│   │
+│   ├── app.py                             # Streamlit home / entry point
+│   └── styles.py                          # CSS + UI styling utilities
 │
 ├── data/
-│   ├── cleaned/                          # Cleaned datasets (future use)
 │   └── raw/
 │       └── recipes.csv                   # Main recipe dataset (ingredients + nutrition)
-│
-├── notebooks/
-│   └── dataset_exploration.ipynb         # Exploratory analysis notebook
 │
 ├── scripts/
 │   └── recipe_search.py                  # Fuzzy matching + ranking algorithm
