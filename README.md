@@ -1,17 +1,14 @@
-# 🥕 PantryPal  
-### *Your Smart Recipe Recommender Based on What’s in Your Kitchen!*  
-
-PantryPal is a web app that suggests recipes based on the ingredients you already have — whether you **type them in** or **upload a photo** of your pantry.  
-It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info**.
+# PantryPal
 ---
 
 ## Project Overview  
 
-> **Goal:** Recommend recipes using a combination of text input, image recognition, and smart fuzzy ingredient matching.
+> **Goal:** Create a web app that suggests recipes based on the ingredients you already have — whether you **type them in** or **upload a photo** of your pantry.  
+It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info**.
 
 ### Core Features  
 - Text-based ingredient input  
-- Image-based ingredient detection (EfficientNetB0)  
+- Image-based ingredient detection
 - Fuzzy ingredient matching (e.g., `chopped onions` ≈ `onions`)  
 - Fuzzy recipe matching based on overlap score
 - Nutrition based ranking
@@ -25,7 +22,7 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 | Component | Technology |
 |------------|-------------|
 | **Frontend/UI** | Streamlit |
-| **Image Recognition** | PyTorch (EfficientNetB0 fine-tuned), OpenCV for image preprocessing |
+| **Image Recognition** | PyTorch (EfficientNetB0 fine-tuned) |
 | **Pre Processing** | Pillow (PIL), NumPy |
 | **Matching Logic** | Python, pandas, rapidfuzz difflib, scikit-learn |
 | **Deployment** | Streamlit Cloud |
