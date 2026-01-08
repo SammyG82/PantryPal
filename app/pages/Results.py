@@ -194,13 +194,13 @@ cooked = st.session_state.get("cooked", False)
 if not cooked:
     st.warning("⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button.")
     if st.button("⬅️ Back to Home", use_container_width=True):
-        st.switch_page("Home.py")
+        st.switch_page("app.py")
     st.stop()
 
 if not imgs and not ings:
     st.warning("⚠️ No inputs found. Add ingredients on the Home page.")
     if st.button("⬅️ Back to Home", use_container_width=True):
-        st.switch_page("Home.py")
+        st.switch_page("app.py")
     st.stop()
 
 # -------------------------------------------------
@@ -462,7 +462,7 @@ col1, col2, col3 = st.columns([2, 1, 2])
 
 with col1:
     if st.button("⬅️ Back to Home", use_container_width=True, type="secondary"):
-        st.switch_page("Home.py")
+        st.switch_page("app.py")
 
 with col3:
     if st.button("🔄 Start Fresh", use_container_width=True, type="primary"):
@@ -474,4 +474,4 @@ with col3:
         st.success("Reset! Starting fresh...")
         import time
         time.sleep(1)
-        st.switch_page("Home.py")
+        st.switch_page("app.py")
