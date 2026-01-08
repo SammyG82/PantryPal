@@ -3,17 +3,8 @@
 
 ## Project Overview  
 
-> **Goal:** Create a web app that suggests recipes based on the ingredients you already have — whether you **type them in** or **upload a photo** of your pantry.  
-It uses **pretrained image recognition models** to detect ingredients and **fuzzy matching algorithms** to recommend the most relevant recipes, complete with **nutrition info**.
+> **Goal:** Create a web app that suggests recipes based on the ingredients users already have. Users can either *type them in* or *upload a photo* of the ingredients in their pantry. It uses a *fine-tuned convolutional neural network (EfficientNetB0)* for image-based individual ingredient detection and *fuzzy string matching* to recommend and rank recipes based on *ingredient overlap* and *available nutrition metadata*.
 
-### Core Features  
-- Text-based ingredient input  
-- Image-based ingredient detection
-- Fuzzy ingredient matching (e.g., `chopped onions` ≈ `onions`)  
-- Fuzzy recipe matching based on overlap score
-- Nutrition based ranking
-- Duplicate image/text handling & simple delete actions
-- Web interface using Streamlit  
 
 ---
 
@@ -24,9 +15,20 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 | **Frontend/UI** | Streamlit |
 | **Image Recognition** | PyTorch (EfficientNetB0 fine-tuned) |
 | **Pre Processing** | Pillow (PIL), NumPy |
-| **Matching Logic** | Python, pandas, rapidfuzz difflib, scikit-learn |
+| **Matching Logic** | Python, pandas, rapidfuzz |
 | **Deployment** | Streamlit Cloud |
 | **Version Control** | Git + GitHub (branches, issues, PRs) |
+
+---
+
+## Core Features  
+- Text-based ingredient input  
+- Image-based individual ingredient detection
+- Fuzzy ingredient matching (e.g., `chopped onions` ≈ `onions`)  
+- Recipe ranking based on ingredient overlap score
+- Secondary ranking based on available nutrition fields (e.g., calories or macros, if present)
+- Duplicate ingredient detection using normalized text comparisons
+- Web interface using Streamlit  
 
 ---
 
@@ -34,7 +36,7 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 
 1. **User Input:**  
    - Add text ingredients
-   - Upload multiple images (max 200MB each)
+   - Upload ingredient image(s) (subject to Streamlit upload limits)
    - Duplicate items (img/text) automatically ignored
    - Each item has a delete button in the UI
 2. **Ingredient Normalization:**  
@@ -44,13 +46,14 @@ It uses **pretrained image recognition models** to detect ingredients and **fuzz
 3. **Recipe Matching:**  
    - Searches through recipes.csv
    - Computes fuzzy similarity for each ingredient
-   - Calculates match score + nutrition score
+   - Calculates an ingredient match score and incorporates available nutrition metadata
 4. **Ranking & Display:**  
-   - Recipes sorted by match % and nutrition
+   - Recipes sorted/ranked by ingredient match % and nutrition metadata
    - Displays key details; score breakdown and link to recipe
 
+---
 
-
+## Project Structure
 
 ```
 PantryPal/
@@ -77,9 +80,6 @@ PantryPal/
 │   ├── cleaned/                          # Cleaned datasets (future use)
 │   └── raw/
 │       └── recipes.csv                   # Main recipe dataset (ingredients + nutrition)
-│
-├── models/
-│   └── mobilenet_head.pt                 # Additional model head weights (if used)
 │
 ├── notebooks/
 │   └── dataset_exploration.ipynb         # Exploratory analysis notebook
