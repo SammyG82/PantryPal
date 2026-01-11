@@ -178,7 +178,7 @@ p, span, div, li {
 # HEADER
 # -------------------------------------------------
 st.markdown(
-    '<div class="header-wrap"><h1>🥗 Your Recipe Matches</h1>'
+    '<div class="header-wrap"><h1>Your Recipe Matches</h1>'
     '<p style="font-size: 1.2rem; color: rgba(255,255,255,0.9); margin-top: 1rem;">'
     'Personalized recipes based on your ingredients</p></div>',
     unsafe_allow_html=True,
@@ -192,21 +192,21 @@ ings = st.session_state.get("all_ingredients") or st.session_state.get("ingredie
 cooked = st.session_state.get("cooked", False)
 
 if not cooked:
-    st.warning("⚠️ You haven't cooked yet! Go back to **Home** and click the **Cook** button.")
-    if st.button("⬅️ Back to Home", use_container_width=True):
+    st.warning("You haven't cooked yet! Go back to **Home** and click the **Cook** button.")
+    if st.button("Back to Home", use_container_width=True):
         st.switch_page("app.py")
     st.stop()
 
 if not imgs and not ings:
-    st.warning("⚠️ No inputs found. Add ingredients on the Home page.")
-    if st.button("⬅️ Back to Home", use_container_width=True):
+    st.warning("No inputs found. Add ingredients on the Home page.")
+    if st.button("Back to Home", use_container_width=True):
         st.switch_page("app.py")
     st.stop()
 
 # -------------------------------------------------
 # SHOW USER INPUTS
 # -------------------------------------------------
-with st.expander("📦 Your ingredients", expanded=True):
+with st.expander("Your ingredients", expanded=True):
     st.markdown(
         """
         <div style="background: rgba(255,255,255,0.05); 
@@ -221,7 +221,7 @@ with st.expander("📦 Your ingredients", expanded=True):
 
     with left:
         if ings:
-            st.markdown("### 📝 Text ingredients:")
+            st.markdown("###Text ingredients:")
             for x in ings:
                 st.markdown(
                     f"""
@@ -240,7 +240,7 @@ with st.expander("📦 Your ingredients", expanded=True):
 
     with right:
         if imgs:
-            st.markdown(f"### 📸 Photos: ({len(imgs)} uploaded)")
+            st.markdown(f"###Photos: ({len(imgs)} uploaded)")
             cols = st.columns(3)
             for idx, img in enumerate(imgs[:3]):
                 with cols[idx % 3]:
@@ -263,13 +263,13 @@ def _load_df():
     return load_recipes("data/raw/recipes.csv")
 
 
-with st.spinner("🔍 Searching through thousands of recipes..."):
+with st.spinner("Searching through thousands of recipes..."):
     df = _load_df()
 
 st.markdown(
     """
     <h2 style="text-align: center; color: #fff; margin: 2rem 0;">
-        🎯 Perfect Recipes Just For You
+        Perfect Recipes Just For You
     </h2>
     """,
     unsafe_allow_html=True,
@@ -329,7 +329,7 @@ if ings:
             st.markdown(
                 """
                 <div class="column-header">
-                    <h4>🔍 Best Ingredient Matches</h4>
+                    <h4>Best Ingredient Matches</h4>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -339,7 +339,7 @@ if ings:
             st.markdown(
                 """
                 <div class="column-header">
-                    <h4>💚 Healthiest Options</h4>
+                    <h4>Healthiest Options</h4>
                 </div>
                 """,
                 unsafe_allow_html=True,
