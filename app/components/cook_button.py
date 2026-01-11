@@ -29,11 +29,11 @@ def render_cook_button():
             </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🍳 **COOK!**", use_container_width=True, type="primary"):
+        if st.button("**COOK!**", use_container_width=True, type="primary"):
             if not st.session_state.images and not st.session_state.ingredients:
-                st.error("⚠️ Please add at least one ingredient or photo before cooking!")
+                st.error("Please add at least one ingredient or photo before cooking!")
             else:
-                with st.spinner("👨‍🍳 Finding amazing recipes for you..."):
+                with st.spinner("Finding amazing recipes for you..."):
                     import time
                     time.sleep(0.5)
 

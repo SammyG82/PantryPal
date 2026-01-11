@@ -11,15 +11,13 @@ def render_image_uploader():
     st.session_state.setdefault("uploader_files_sig", None)
 
     st.markdown(
-        """
-        <div class="section-title">
-            <span style="font-size: 1.8rem;">📸</span>
-            <h3>Upload ingredient photos</h3>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+    """
+    <div class="section-title">
+        <h3 style="font-size: 1.45rem;">Upload your individual ingredients</h3>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
     # --- FILE UPLOADER (ONLY FOR ADDING NEW IMAGES) ---
     uploaded = st.file_uploader(
         "Choose images",
@@ -27,35 +25,8 @@ def render_image_uploader():
         accept_multiple_files=True,
         key=f"uploader_{st.session_state.uploader_key}",
         label_visibility="collapsed",
-        help="📷 Drag and drop or click to upload photos of your ingredients",
+        help="Drag and drop or click to upload photos of your ingredients",
     )
-
-    # We treat the uploader ONLY as an input source.
-    # We do NOT rely on its little "x" delete icons for state.
-    # if uploaded:
-    #     # Build a simple "signature" of the current uploader contents
-    #     file_sig = [(f.name, getattr(f, "size", None)) for f in uploaded]
-
-    #     # Only rebuild images if the uploader selection actually changed
-    #     if st.session_state.uploader_files_sig != file_sig:
-    #         new_images = []
-    #         for file in uploaded:
-    #             data = file.read()
-    #             img_info = {"name": file.name, "bytes": data}
-
-    #             # Run model prediction once per image
-    #             try:
-    #                 pil_img = Image.open(io.BytesIO(data))
-    #                 pred = predict_image(pil_img)
-    #                 img_info["prediction"] = pred
-    #             except Exception:
-    #                 img_info["prediction"] = None
-
-    #             new_images.append(img_info)
-
-    #         # Replace current images with this selection
-    #         st.session_state.images = new_images
-    #         st.session_state.uploader_files_sig = file_sig
 
     if uploaded:
         # Build a simple "signature" of the current uploader contents
@@ -144,7 +115,7 @@ def render_image_uploader():
         # Clear-all button: also resets the uploader widget
         mid1, mid2, mid3 = st.columns([1, 2, 1])
         with mid2:
-            if st.button("🔄 Clear All Photos", use_container_width=True):
+            if st.button("Clear All Photos", use_container_width=True):
                 st.session_state.images = []
                 st.session_state.uploader_key += 1  # forces a fresh uploader
                 st.session_state.uploader_files_sig = None
@@ -162,7 +133,7 @@ def render_image_uploader():
                         text-align: center;
                         margin-top: 1rem;">
                 <p style="color: rgba(255,255,255,0.7); font-size: 1.1rem; margin: 0;">
-                    📸 No photos uploaded yet<br>
+                    No photos uploaded yet<br>
                     <span style="font-size: 0.95rem;">Click or drag images above</span>
                 </p>
             </div>
