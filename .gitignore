@@ -27,6 +27,7 @@ data/cleaned/*
 # ========== Models ==========
 backend/model/*.pt
 backend/model/*.pth
+backend/model/.cache/
 
 # ========== Frontend build ==========
 frontend/dist/

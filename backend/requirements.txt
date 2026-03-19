@@ -8,3 +8,4 @@ torchvision
 open-clip-torch
 Pillow
 huggingface_hub
+python-dotenv
