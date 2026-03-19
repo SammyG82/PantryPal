@@ -129,7 +129,7 @@ uvicorn app:app --reload
 # Runs on http://localhost:8000
 ```
 
-Create `backend/.env`:
+Create `.env` in the project root:
 ```
 HF_TOKEN=your_huggingface_token
 ```
