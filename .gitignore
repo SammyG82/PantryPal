@@ -25,11 +25,12 @@ data/cleaned/*
 !data/nutrition_cache.json
 
 # ========== Models ==========
-# ========== Models ==========
-model/*
-!model/.gitkeep
-!model/Food_Recognition_Model.pt
-!model/label_map.json
+backend/model/*.pt
+backend/model/*.pth
+
+# ========== Frontend build ==========
+frontend/dist/
+frontend/node_modules/
 
 # ========== System ==========
 .DS_Store
@@ -42,3 +43,4 @@ Thumbs.db
 *.zip
 *.tar
 *.tar.gz
+pantrypal-design-1-editorial.html
