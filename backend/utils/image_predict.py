@@ -1,6 +1,7 @@
 # backend/utils/image_predict.py
 
 import json
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,6 +24,29 @@ else:
 # PATHS — relative to backend/ directory
 # -------------------------
 BASE_DIR = Path(__file__).parent.parent
+
+# -------------------------
+# DOWNLOAD MODEL FROM HUGGINGFACE IF NOT PRESENT
+# -------------------------
+HF_REPO = "SammyG82/Single_Ingredient_Identification"
+HF_TOKEN = os.environ.get("HF_TOKEN")
+MODEL_DIR = BASE_DIR / "model"
+
+def _ensure_model_files():
+    from huggingface_hub import hf_hub_download
+    for filename in ["Food_Recognition_Model_94.pt", "label_map.json"]:
+        dest = MODEL_DIR / filename
+        if not dest.exists():
+            print(f"Downloading {filename} from HuggingFace...")
+            hf_hub_download(
+                repo_id=HF_REPO,
+                filename=filename,
+                local_dir=str(MODEL_DIR),
+                token=HF_TOKEN,
+            )
+            print(f"Downloaded {filename}")
+
+_ensure_model_files()
 LABEL_MAP_PATH = BASE_DIR / "model" / "label_map.json"
 MODEL_PATH = BASE_DIR / "model" / "Food_Recognition_Model_94.pt"
 
