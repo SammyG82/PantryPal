@@ -19,10 +19,6 @@ function Results() {
   const [sortMode, setSortMode] = useState('match')
 
   useEffect(() => {
-    if (!ingredients) navigate('/', { replace: true })
-  }, [ingredients, navigate])
-
-  useEffect(() => {
     if (!ingredients) return
 
     const fetchRecipes = async () => {
@@ -47,7 +43,22 @@ function Results() {
     fetchRecipes()
   }, [ingredients])
 
-  if (!ingredients) return null
+  if (!ingredients) return (
+    <div>
+      <NavBar ingredients={[]} />
+      <div className="empty-state" style={{ minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '1.25rem' }}>🥗</div>
+        <h3>No ingredients yet</h3>
+        <p style={{ marginTop: '0.5rem' }}>Head back and upload a photo or type in what you have — we'll find recipes you can make right now.</p>
+        <button
+          style={{ marginTop: '1.75rem', padding: '12px 32px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.95rem', fontWeight: 500 }}
+          onClick={() => navigate('/')}
+        >
+          Add ingredients →
+        </button>
+      </div>
+    </div>
+  )
 
   const sorted = [...recipes].sort((a, b) =>
     sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score

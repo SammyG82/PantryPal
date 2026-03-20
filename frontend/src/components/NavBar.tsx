@@ -15,7 +15,7 @@ function NavBar({ ingredients = [] }: NavBarProps) {
         Pantry<em>Pal</em>
       </span>
       <div className="nav-right">
-        {isResults && (
+        {isResults ? (
           <>
             <span className="ing-summary-pill">
               {ingredients.length} ingredient{ingredients.length !== 1 ? 's' : ''}
@@ -24,6 +24,10 @@ function NavBar({ ingredients = [] }: NavBarProps) {
               ← Back
             </button>
           </>
+        ) : (
+          <button className="back-btn" onClick={() => navigate('/results')}>
+            Results
+          </button>
         )}
       </div>
     </nav>

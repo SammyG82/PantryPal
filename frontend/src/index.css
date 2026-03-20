@@ -22,10 +22,10 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .home-hero p{font-size:1rem;color:var(--muted);max-width:440px;margin:0 auto;line-height:1.7;font-weight:300}
 .input-section{padding:2rem 2.5rem 3rem;max-width:960px;margin:0 auto}
 .input-card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.input-cols{display:grid;grid-template-columns:1fr 48px 1fr}
+.input-cols{display:grid;grid-template-columns:1fr 80px 1fr}
 .input-col{padding:2rem}
-.input-divider{display:flex;align-items:center;justify-content:center;background:var(--cream2);border-left:1px solid var(--border);border-right:1px solid var(--border)}
-.or-badge{background:white;border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:500;color:var(--muted)}
+.input-divider{display:flex;align-items:center;justify-content:center;position:relative;z-index:1}.input-divider::before{content:'';position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:1px;background:var(--border)}
+.or-badge{background:white;border:1px solid var(--border);border-radius:50%;width:72px;height:72px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:500;color:var(--muted);position:relative;z-index:2}
 .col-title{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--ink);margin-bottom:0.25rem}
 .col-sub{font-size:0.78rem;color:var(--muted);margin-bottom:1.25rem;font-weight:300;line-height:1.5}
 .upload-zone{border:1.5px dashed var(--border);border-radius:10px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--cream)}
