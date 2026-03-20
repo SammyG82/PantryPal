@@ -17,6 +17,9 @@ function Results() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState('match')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Recipe[]>([])
+  const [searching, setSearching] = useState(false)
 
   useEffect(() => {
     if (!ingredients) return
@@ -43,6 +46,27 @@ function Results() {
     fetchRecipes()
   }, [ingredients])
 
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`${API}/api/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [] }),
+        })
+        if (res.ok) setSearchResults(await res.json() as Recipe[])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   if (!ingredients) return (
     <div>
       <NavBar ingredients={[]} />
@@ -60,7 +84,11 @@ function Results() {
     </div>
   )
 
-  const sorted = [...recipes].sort((a, b) =>
+  const isSearching = searchQuery.trim().length > 0
+  const displayRecipes = isSearching
+    ? searchResults.filter((r) => r.match_score > 0)
+    : recipes
+  const sorted = [...displayRecipes].sort((a, b) =>
     sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score
   )
 
@@ -75,9 +103,15 @@ function Results() {
         </p>
       </div>
 
-      <SortBar current={sortMode} onChange={setSortMode} count={loading ? undefined : sorted.length} />
+      <SortBar
+        current={sortMode}
+        onChange={setSortMode}
+        count={(loading || searching) ? undefined : sorted.length}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+      />
 
-      {loading && <div className="loading-state">Finding recipes for you…</div>}
+      {(loading || searching) && <div className="loading-state">Finding recipes for you…</div>}
 
       {error && (
         <div className="error-state">
@@ -92,20 +126,30 @@ function Results() {
         </div>
       )}
 
-      {!loading && !error && sorted.length === 0 && (
+      {!loading && !searching && !error && sorted.length === 0 && (
         <div className="empty-state">
-          <h3>No matches found</h3>
-          <p>Try adding more ingredients or different ones.</p>
-          <button
-            style={{ marginTop: '1.5rem', padding: '10px 28px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.9rem' }}
-            onClick={() => navigate('/')}
-          >
-            Try again
-          </button>
+          {isSearching ? (
+            <>
+              <div style={{ fontSize: '2.5rem', marginBottom: '1.25rem' }}>🔍</div>
+              <h3>No matching recipes</h3>
+              <p style={{ marginTop: '0.5rem' }}>None of your ingredients match any <em>"{searchQuery}"</em> recipes. Try a different search or add more ingredients.</p>
+            </>
+          ) : (
+            <>
+              <h3>No matches found</h3>
+              <p>Try adding more ingredients or different ones.</p>
+              <button
+                style={{ marginTop: '1.5rem', padding: '10px 28px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.9rem' }}
+                onClick={() => navigate('/')}
+              >
+                Try again
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {!loading && !error && sorted.length > 0 && (
+      {!loading && !searching && !error && sorted.length > 0 && (
         <div className="recipe-grid">
           {sorted.map((recipe, i) => (
             <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />

@@ -409,3 +409,63 @@ def match_recipes(
 
     candidates.sort(key=lambda c: (-c["score"], c["recipe_size"]))
     return candidates[:quota]
+
+
+def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 20) -> List[Dict]:
+    if not query.strip():
+        return []
+    q = query.strip().lower()
+    mask = df["display_name"].str.lower().str.contains(q, na=False)
+    matches = df[mask].head(limit)
+
+    user_cores: Set[str] = set()
+    if user_ings:
+        for u in user_ings:
+            core = _clean_ingredient_to_core(u)
+            if core:
+                user_cores.add(core)
+
+    results = []
+    for idx, row in matches.iterrows():
+        health_score = _compute_health_score(row)
+        servings_raw = str(row.get("servings", "") or "")
+        servings_int = None
+        m = re.search(r"(\d+)", servings_raw)
+        if m:
+            try:
+                servings_int = int(m.group(1))
+            except ValueError:
+                pass
+        cook_time_raw = str(row.get("cook_time", "") or "")
+
+        recipe_set = set(row["ingredients_norm"])
+        recipe_size = len(recipe_set)
+        if user_cores and recipe_size > 0:
+            matched = _fuzzy_intersection(user_cores, recipe_set)
+            match_count = len(matched)
+            pct_recipe = match_count / recipe_size
+            union_size = len(user_cores | recipe_set)
+            jaccard = match_count / union_size if union_size > 0 else 0.0
+            score = 0.7 * pct_recipe + 0.3 * jaccard
+        else:
+            match_count = 0
+            score = 0.0
+
+        results.append({
+            "id":          int(idx),
+            "name":        row["display_name"],
+            "matches":     match_count,
+            "score":       score,
+            "recipe_size": recipe_size,
+            "health_score": health_score,
+            "protein_g":   float(row.get("protein_g", 0.0) or 0.0),
+            "fat_g":       float(row.get("fat_g", 0.0) or 0.0),
+            "sugar_g":     float(row.get("sugar_g", 0.0) or 0.0),
+            "carbs_g":     float(row.get("carbs_g", 0.0) or 0.0),
+            "calories":    int(row.get("calories", 0) or 0),
+            "cook_time":   cook_time_raw if cook_time_raw and cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A",
+            "servings":    servings_int,
+            "url":         str(row.get("url", "") or ""),
+            "img_src":     str(row.get("img_src", "") or ""),
+        })
+    return results

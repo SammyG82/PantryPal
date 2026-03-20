@@ -12,9 +12,11 @@ interface SortBarProps {
   current: string
   onChange: (key: string) => void
   count?: number
+  searchQuery: string
+  onSearchChange: (q: string) => void
 }
 
-function SortBar({ current, onChange, count }: SortBarProps) {
+function SortBar({ current, onChange, count, searchQuery, onSearchChange }: SortBarProps) {
   return (
     <div className="sort-bar">
       <span className="sort-label">Sort by</span>
@@ -29,6 +31,13 @@ function SortBar({ current, onChange, count }: SortBarProps) {
           </button>
         ))}
       </div>
+      <input
+        className="recipe-search"
+        type="text"
+        placeholder="Search all recipes…"
+        value={searchQuery}
+        onChange={(e) => onSearchChange(e.target.value)}
+      />
       {count !== undefined && (
         <span className="results-count">{count} recipe{count !== 1 ? 's' : ''} found</span>
       )}

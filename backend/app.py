@@ -119,6 +119,48 @@ async def detect_ingredients(file: UploadFile = File(...)):
     return DetectResponse(ingredients=ingredients)
 
 
+class SearchRequest(BaseModel):
+    q: str
+    ingredients: List[str] = []
+
+
+@app.post("/api/search", response_model=List[RecipeResponse])
+def search_recipes(body: SearchRequest):
+    if not body.q.strip():
+        return []
+
+    from recipe_search import search_by_name
+
+    df = get_df()
+    results = search_by_name(body.q, df, user_ings=body.ingredients or None)
+
+    response: List[RecipeResponse] = []
+    for r in results:
+        health_pct = round(r["health_score"] * 100)
+        cook_time_raw = r.get("cook_time", "") or ""
+        cook_time = cook_time_raw.strip() if cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A"
+        response.append(
+            RecipeResponse(
+                id=r["id"],
+                name=r["name"],
+                match_score=round(r["score"] * 100),
+                health_score=health_pct,
+                calories=r.get("calories", 0) or 0,
+                protein=round(r.get("protein_g", 0.0) or 0.0, 1),
+                fat=round(r.get("fat_g", 0.0) or 0.0, 1),
+                carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
+                cook_time=cook_time,
+                servings=r.get("servings"),
+                matched_count=r["matches"],
+                total_ingredients=r["recipe_size"],
+                tags=_tags_from_health(health_pct),
+                url=r.get("url", "") or "",
+                img_src=r.get("img_src", "") or "",
+            )
+        )
+    return response
+
+
 @app.post("/api/recipes", response_model=List[RecipeResponse])
 def get_recipes(body: RecipesRequest):
     """
