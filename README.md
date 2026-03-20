@@ -19,7 +19,7 @@
 | **Image Recognition** | OpenCLIP ViT-B-32 (fine-tuned), PyTorch |
 | **Pre Processing** | Pillow (PIL), torchvision |
 | **Matching Logic** | Python, pandas, rapidfuzz |
-| **Deployment** | Vercel (frontend) + Render (backend) |
+| **Deployment** | Vercel (frontend) + HuggingFace Spaces (backend) |
 | **Version Control** | Git + GitHub |
 
 ---
@@ -69,7 +69,7 @@
 | **Classes** | 46 ingredients |
 | **Accuracy** | ~94% on test set |
 | **Training data** | `Scuccorese/food-ingredients-dataset` (HuggingFace), 80/20 stratified split |
-| **Model file** | `Food_Recognition_Model_94.pt` (~351MB) — auto-downloaded from HuggingFace at startup |
+| **Model file** | `Food_Recognition_Model_94.pt` (~351MB) — stored at `SammyG82/Single_Ingredient_Identification` (public), auto-downloaded at startup |
 
 The model is a **single-label classifier** — it predicts one ingredient per image. For multiple ingredients, upload one photo per ingredient.
 
@@ -102,6 +102,7 @@ PantryPal/
 ├── backend/                         # Python FastAPI server
 │   ├── app.py                       # API entry point
 │   ├── recipe_search.py             # Fuzzy matching + ranking logic
+│   ├── Dockerfile                   # For HuggingFace Spaces deployment
 │   ├── model/
 │   │   ├── Food_Recognition_Model_94.pt   # CLIP model weights (gitignored, auto-downloaded)
 │   │   └── label_map.json                 # Index → ingredient name map
@@ -129,11 +130,7 @@ uvicorn app:app --reload
 # Runs on http://localhost:8000
 ```
 
-Create `.env` in the project root:
-```
-HF_TOKEN=your_huggingface_token
-```
-The model downloads automatically from HuggingFace on first run (~351MB).
+The model downloads automatically from HuggingFace on first run (~351MB). No token required — the model repo is public.
 
 ### Frontend
 ```bash
@@ -152,10 +149,11 @@ VITE_API_URL=http://localhost:8000
 
 ## Deployment
 
-| | Service | Notes |
+| | Service | URL |
 |---|---|---|
-| **Frontend** | Vercel | Root: `frontend`, build: `vite build`, output: `dist` |
-| **Backend** | Render | Root: `backend`, start: `uvicorn app:app --host 0.0.0.0 --port $PORT` |
+| **Frontend** | Vercel | `pantry-pal-kohl.vercel.app` |
+| **Backend** | HuggingFace Spaces | `SammyG82-pantrypal.hf.space` |
 
-Set `VITE_API_URL` on Vercel to point to the Render backend URL.
-Set `HF_TOKEN` on Render to allow model download from HuggingFace.
+- Frontend env var: `VITE_API_URL=https://SammyG82-pantrypal.hf.space`
+- Backend Space repo: `huggingface.co/spaces/SammyG82/pantrypal` (separate from this GitHub repo)
+- No secrets required — model repo is public

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
-import UploadZone from '../components/UploadZone'
+import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
 import IngredientInput from '../components/IngredientInput'
 import IngredientChip from '../components/IngredientChip'
 
@@ -9,6 +9,7 @@ function Home() {
   const [typedIngredients, setTypedIngredients] = useState<string[]>([])
   const [detectedIngredients, setDetectedIngredients] = useState<string[]>([])
   const navigate = useNavigate()
+  const uploadZoneRef = useRef<UploadZoneHandle>(null)
 
   const allIngredients = [
     ...typedIngredients,
@@ -60,7 +61,7 @@ function Home() {
               <p className="col-sub">
                 Snap an individual ingredient from your fridge or pantry. Our AI will detect the ingredients automatically.
               </p>
-              <UploadZone onDetectedChange={handleDetected} />
+              <UploadZone ref={uploadZoneRef} onDetectedChange={handleDetected} />
             </div>
 
             <div className="input-divider">
@@ -91,7 +92,19 @@ function Home() {
 
           <div className="cook-footer">
             <div className="total-count">
-              <strong>{allIngredients.length}</strong> ingredient{allIngredients.length !== 1 ? 's' : ''} added
+              <div className="footer-label">
+                <strong>{allIngredients.length}</strong> ingredient{allIngredients.length !== 1 ? 's' : ''} added
+              </div>
+              {allIngredients.length > 0 && (
+                <div className="footer-chips">
+                  {typedIngredients.map((ing, i) => (
+                    <IngredientChip key={ing + i} label={ing} onRemove={() => removeIngredient(i)} />
+                  ))}
+                  {detectedIngredients.filter(d => !typedIngredients.some(t => t.toLowerCase() === d.toLowerCase())).map((ing) => (
+                    <IngredientChip key={ing} label={ing} onRemove={() => uploadZoneRef.current?.removeByIngredient(ing)} />
+                  ))}
+                </div>
+              )}
             </div>
             <button
               className="cook-btn"

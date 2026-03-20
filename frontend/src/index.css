@@ -53,6 +53,9 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .cook-footer{background:var(--cream2);border-top:1px solid var(--border);padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .total-count{font-size:0.875rem;color:var(--muted)}
 .total-count strong{color:var(--ink);font-weight:500}
+.footer-label{font-size:0.875rem;color:var(--muted);margin-bottom:0.5rem}
+.footer-label strong{color:var(--ink)}
+.footer-chips{display:flex;flex-wrap:wrap;gap:6px}
 .cook-btn{background:var(--terra);color:white;border:none;padding:13px 40px;border-radius:50px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:500;cursor:pointer;transition:all .2s;letter-spacing:0.2px}
 .cook-btn:hover{background:var(--ink);transform:translateY(-1px)}
 .cook-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;transform:none}

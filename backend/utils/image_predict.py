@@ -1,10 +1,7 @@
 # backend/utils/image_predict.py
 
 import json
-import os
 from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,7 +28,6 @@ BASE_DIR = Path(__file__).parent.parent
 # DOWNLOAD MODEL FROM HUGGINGFACE IF NOT PRESENT
 # -------------------------
 HF_REPO = "SammyG82/Single_Ingredient_Identification"
-HF_TOKEN = os.environ.get("HF_TOKEN")
 MODEL_DIR = BASE_DIR / "model"
 
 def _ensure_model_files():
@@ -44,7 +40,6 @@ def _ensure_model_files():
                 repo_id=HF_REPO,
                 filename=filename,
                 local_dir=str(MODEL_DIR),
-                token=HF_TOKEN,
             )
             print(f"Downloaded {filename}")
 

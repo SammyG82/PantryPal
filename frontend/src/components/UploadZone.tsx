@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, forwardRef, useImperativeHandle } from 'react'
 import IngredientChip from './IngredientChip'
 
 const API = import.meta.env.VITE_API_URL ?? ''
@@ -10,11 +10,15 @@ interface Upload {
   detecting: boolean
 }
 
+export interface UploadZoneHandle {
+  removeByIngredient: (ingredient: string) => void
+}
+
 interface UploadZoneProps {
   onDetectedChange: (ingredients: string[]) => void
 }
 
-function UploadZone({ onDetectedChange }: UploadZoneProps) {
+const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(({ onDetectedChange }, ref) => {
   const [dragOver, setDragOver] = useState(false)
   const [uploads, setUploads] = useState<Upload[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -75,6 +79,8 @@ function UploadZone({ onDetectedChange }: UploadZoneProps) {
       return updated
     })
   }
+
+  useImperativeHandle(ref, () => ({ removeByIngredient }))
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -160,6 +166,6 @@ function UploadZone({ onDetectedChange }: UploadZoneProps) {
       )}
     </div>
   )
-}
+})
 
 export default UploadZone
