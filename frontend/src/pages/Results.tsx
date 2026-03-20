@@ -18,7 +18,7 @@ function Results() {
   const [error, setError] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState('match')
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Recipe[]>([])
+  const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
 
   useEffect(() => {
@@ -48,7 +48,7 @@ function Results() {
 
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setSearchResults([])
+      setSearchResults(null)
       return
     }
     const timer = setTimeout(async () => {
@@ -59,7 +59,10 @@ function Results() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [] }),
         })
-        if (res.ok) setSearchResults(await res.json() as Recipe[])
+        if (res.ok) {
+          const data = await res.json() as Recipe[]
+          setSearchResults(data)
+        }
       } finally {
         setSearching(false)
       }
@@ -85,8 +88,9 @@ function Results() {
   )
 
   const isSearching = searchQuery.trim().length > 0
-  const displayRecipes = isSearching
-    ? searchResults.filter((r) => r.match_score > 0)
+  const searchReady = isSearching && searchResults !== null
+  const displayRecipes = searchReady
+    ? searchResults!.filter((r) => r.match_score > 0)
     : recipes
   const sorted = [...displayRecipes].sort((a, b) =>
     sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score
@@ -111,7 +115,7 @@ function Results() {
         onSearchChange={setSearchQuery}
       />
 
-      {(loading || searching) && <div className="loading-state">Finding recipes for you…</div>}
+      {loading && <div className="loading-state">Finding recipes for you…</div>}
 
       {error && (
         <div className="error-state">
@@ -126,7 +130,7 @@ function Results() {
         </div>
       )}
 
-      {!loading && !searching && !error && sorted.length === 0 && (
+      {!loading && !error && !searching && sorted.length === 0 && (!isSearching || searchReady) && (
         <div className="empty-state">
           {isSearching ? (
             <>
@@ -149,7 +153,7 @@ function Results() {
         </div>
       )}
 
-      {!loading && !searching && !error && sorted.length > 0 && (
+      {!loading && !error && sorted.length > 0 && (
         <div className="recipe-grid">
           {sorted.map((recipe, i) => (
             <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />
