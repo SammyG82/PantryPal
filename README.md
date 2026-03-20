@@ -33,6 +33,10 @@
 - Recipe ranking based on ingredient overlap score
 - Secondary ranking based on health score derived from nutrition metadata
 - Duplicate ingredient detection — silently ignored across both typed and detected inputs
+- Recipe name search — debounced search bar filters results and scores them by ingredient overlap
+- Recipe images pulled from CSV `img_src` column, with emoji fallback
+- "View Full Recipe" button links to the original recipe URL in a new tab
+- Results nav link — jump directly to the last results from the navbar
 - Responsive web interface
 
 ---
@@ -57,7 +61,8 @@
 
 4. **Ranking & Display:**
    - Sort by Best Match (ingredient overlap %) or Healthiest First (health score)
-   - Recipe cards show rank, score, tags, macros, cook time, servings
+   - Recipe name search bar — debounced 300ms, scores results by ingredient overlap, hides zero-match recipes
+   - Recipe cards show rank, score, tags, macros, cook time, servings, image, and link to full recipe
 
 ---
 
@@ -85,34 +90,38 @@ PantryPal/
 │   │   │   ├── Home.tsx             # Ingredient input page
 │   │   │   └── Results.tsx          # Recipe results page
 │   │   ├── components/
-│   │   │   ├── NavBar.tsx
+│   │   │   ├── NavBar.tsx           # Navigation header
 │   │   │   ├── UploadZone.tsx       # Photo upload + ingredient detection
 │   │   │   ├── IngredientInput.tsx  # Text input for ingredients
 │   │   │   ├── IngredientChip.tsx   # Removable ingredient pill
 │   │   │   ├── RecipeCard.tsx       # Recipe result card
-│   │   │   └── SortBar.tsx          # Sort toggle (match / health)
+│   │   │   └── SortBar.tsx          # Sort toggle + recipe search bar
 │   │   ├── App.tsx
 │   │   ├── main.tsx
 │   │   ├── types.ts                 # Shared TypeScript types
+│   │   ├── vite-env.d.ts            # Vite environment type reference
 │   │   └── index.css                # Global styles + design system
 │   ├── index.html
 │   ├── vite.config.js
-│   └── package.json
+│   ├── package.json
+│   ├── .env                         # VITE_API_URL=http://localhost:8000 (gitignored)
+│   └── .env.example                 # Template for local setup
 │
 ├── backend/                         # Python FastAPI server
 │   ├── app.py                       # API entry point
 │   ├── recipe_search.py             # Fuzzy matching + ranking logic
 │   ├── Dockerfile                   # For HuggingFace Spaces deployment
+│   ├── requirements.txt
 │   ├── model/
 │   │   ├── Food_Recognition_Model_94.pt   # CLIP model weights (gitignored, auto-downloaded)
-│   │   └── label_map.json                 # Index → ingredient name map
-│   ├── utils/
-│   │   └── image_predict.py         # CLIP model loading + inference
-│   └── requirements.txt
+│   │   └── label_map.json                 # Index → ingredient name map (46 classes)
+│   └── utils/
+│       ├── __init__.py
+│       └── image_predict.py         # CLIP model loading + inference
 │
 ├── data/
 │   └── raw/
-│       └── recipes.csv              # Recipe dataset (ingredients + nutrition)
+│       └── recipes.csv              # 956 recipes — ingredients, nutrition, images, URLs
 │
 ├── .gitignore
 └── README.md

@@ -153,7 +153,9 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
           </div>
         </div>
 
-        <button className="view-btn" onClick={() => url && window.open(url, '_blank')}>View full recipe →</button>
+        {url && (
+          <button className="view-btn" onClick={() => window.open(url, '_blank')}>View full recipe →</button>
+        )}
       </div>
     </div>
   )
