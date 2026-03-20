@@ -58,7 +58,7 @@ function Home() {
             <div className="input-col">
               <div className="col-title">Upload a photo</div>
               <p className="col-sub">
-                Snap your fridge or pantry. Our AI will detect the ingredients automatically.
+                Snap an individual ingredient from your fridge or pantry. Our AI will detect the ingredients automatically.
               </p>
               <UploadZone onDetectedChange={handleDetected} />
             </div>
