@@ -64,6 +64,8 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
     matched_count,
     total_ingredients,
     tags,
+    url,
+    img_src,
   } = recipe
 
   const primaryScore = sortMode === 'health' ? health_score : match_score
@@ -71,7 +73,10 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
   return (
     <div className="recipe-card">
       <div className="recipe-img" style={{ background: getGradient(tags) }}>
-        {getEmoji(name)}
+        {img_src
+          ? <img src={img_src} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : getEmoji(name)
+        }
         <span className="rank-badge">#{rank}</span>
         <span className={`score-badge ${getScoreClass(primaryScore)}`}>
           {primaryScore}%
@@ -148,7 +153,7 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
           </div>
         </div>
 
-        <button className="view-btn">View full recipe →</button>
+        <button className="view-btn" onClick={() => url && window.open(url, '_blank')}>View full recipe →</button>
       </div>
     </div>
   )

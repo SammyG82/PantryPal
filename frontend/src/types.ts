@@ -12,4 +12,6 @@ export interface Recipe {
   matched_count: number
   total_ingredients: number
   tags: string[]
+  url: string
+  img_src: string
 }

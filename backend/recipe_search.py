@@ -228,6 +228,11 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     else:
         out["url"] = ""
 
+    if "img_src" in df.columns:
+        out["img_src"] = df["img_src"].fillna("").astype(str)
+    else:
+        out["img_src"] = ""
+
     # Nutrition parsing
     if "nutrition" in df.columns:
         out["calories"] = df["nutrition"].apply(_extract_calories)
@@ -394,6 +399,7 @@ def match_recipes(
             "cook_time":      str(row.get("cook_time", "") or ""),
             "servings":       servings_int,
             "url":            str(row.get("url", "") or ""),
+            "img_src":        str(row.get("img_src", "") or ""),
             "matched_cores":  sorted(matched_ingredients),
             "user_cores":     sorted(user_cores),
         })

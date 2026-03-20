@@ -43,7 +43,7 @@ function Home() {
       <NavBar ingredients={allIngredients} />
 
       <div className="home-hero">
-        <div className="eyebrow">✨ AI-powered recipe matching</div>
+        <div className="eyebrow">✨ ML-powered recipe matching</div>
         <h1>
           What's in your<br />
           <em>kitchen today?</em>

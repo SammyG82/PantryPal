@@ -67,6 +67,8 @@ class RecipeResponse(BaseModel):
     matched_count: int
     total_ingredients: int
     tags: List[str]
+    url: str
+    img_src: str
 
 
 class DetectResponse(BaseModel):
@@ -157,6 +159,8 @@ def get_recipes(body: RecipesRequest):
                 matched_count=r["matches"],
                 total_ingredients=r["recipe_size"],
                 tags=_tags_from_health(health_pct),
+                url=r.get("url", "") or "",
+                img_src=r.get("img_src", "") or "",
             )
         )
 
