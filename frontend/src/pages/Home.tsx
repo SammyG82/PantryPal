@@ -1,15 +1,27 @@
-import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
 import IngredientInput from '../components/IngredientInput'
 import IngredientChip from '../components/IngredientChip'
+import type { Upload } from '../types'
 
-function Home() {
-  const [typedIngredients, setTypedIngredients] = useState<string[]>([])
-  const [detectedIngredients, setDetectedIngredients] = useState<string[]>([])
+interface HomeProps {
+  typedIngredients: string[]
+  setTypedIngredients: React.Dispatch<React.SetStateAction<string[]>>
+  uploads: Upload[]
+  setUploads: React.Dispatch<React.SetStateAction<Upload[]>>
+}
+
+function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: HomeProps) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const lastIngredients: string[] | undefined = location.state?.lastIngredients
   const uploadZoneRef = useRef<UploadZoneHandle>(null)
+
+  const detectedIngredients = uploads
+    .filter((u) => u.ingredient !== null && !u.detecting)
+    .map((u) => u.ingredient as string)
 
   const allIngredients = [
     ...typedIngredients,
@@ -29,10 +41,6 @@ function Home() {
     setTypedIngredients((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleDetected = (detectedList: string[]) => {
-    setDetectedIngredients(detectedList)
-  }
-
   const handleCook = () => {
     if (allIngredients.length === 0) return
     navigate('/results', { state: { ingredients: allIngredients } })
@@ -40,7 +48,7 @@ function Home() {
 
   return (
     <div>
-      <NavBar ingredients={allIngredients} />
+      <NavBar ingredients={allIngredients} lastIngredients={lastIngredients} />
 
       <div className="home-hero">
         <div className="eyebrow">✨ ML-powered recipe matching</div>
@@ -61,7 +69,12 @@ function Home() {
               <p className="col-sub">
                 Snap an individual ingredient from your fridge or pantry. Our AI will detect the ingredients automatically.
               </p>
-              <UploadZone ref={uploadZoneRef} onDetectedChange={handleDetected} />
+              <UploadZone
+                ref={uploadZoneRef}
+                onDetectedChange={() => {}}
+                initialUploads={uploads}
+                onUploadsChange={(updated) => setUploads(updated)}
+              />
             </div>
 
             <div className="input-divider">
@@ -100,9 +113,11 @@ function Home() {
                   {typedIngredients.map((ing, i) => (
                     <IngredientChip key={ing + i} label={ing} onRemove={() => removeIngredient(i)} />
                   ))}
-                  {detectedIngredients.filter(d => !typedIngredients.some(t => t.toLowerCase() === d.toLowerCase())).map((ing) => (
-                    <IngredientChip key={ing} label={ing} onRemove={() => uploadZoneRef.current?.removeByIngredient(ing)} />
-                  ))}
+                  {detectedIngredients
+                    .filter((d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase()))
+                    .map((ing) => (
+                      <IngredientChip key={ing} label={ing} onRemove={() => uploadZoneRef.current?.removeByIngredient(ing)} />
+                    ))}
                 </div>
               )}
             </div>

@@ -1,3 +1,10 @@
+export interface Upload {
+  id: string
+  url: string
+  ingredient: string | null
+  detecting: boolean
+}
+
 export interface Recipe {
   id: number
   name: string

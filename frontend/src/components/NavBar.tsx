@@ -2,9 +2,10 @@ import { useNavigate, useLocation } from 'react-router-dom'
 
 interface NavBarProps {
   ingredients: string[]
+  lastIngredients?: string[]
 }
 
-function NavBar({ ingredients = [] }: NavBarProps) {
+function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const isResults = location.pathname === '/results'
@@ -20,12 +21,12 @@ function NavBar({ ingredients = [] }: NavBarProps) {
             <span className="ing-summary-pill">
               {ingredients.length} ingredient{ingredients.length !== 1 ? 's' : ''}
             </span>
-            <button className="back-btn" onClick={() => navigate(-1)}>
+            <button className="back-btn" onClick={() => navigate('/', { state: { lastIngredients: ingredients } })}>
               ← Back
             </button>
           </>
         ) : (
-          <button className="back-btn" onClick={() => navigate('/results')}>
+          <button className="back-btn" onClick={() => navigate('/results', lastIngredients?.length ? { state: { ingredients: lastIngredients } } : undefined)}>
             Results
           </button>
         )}

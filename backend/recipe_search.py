@@ -326,8 +326,6 @@ def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
     quota: int = 7,
-    hi_thresh: float = 0.5,
-    lo_thresh: float = 0.3,
 ) -> List[Dict]:
     if not user_ings:
         return []

@@ -62,13 +62,17 @@ function Results() {
         if (res.ok) {
           const data = await res.json() as Recipe[]
           setSearchResults(data)
+        } else {
+          setSearchResults(null)
         }
+      } catch {
+        setSearchResults(null)
       } finally {
         setSearching(false)
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery])
+  }, [searchQuery, ingredients])
 
   if (!ingredients) return (
     <div>

@@ -78,6 +78,11 @@ class DetectResponse(BaseModel):
 # -------------------------------------------------
 # Tag helper
 # -------------------------------------------------
+def _parse_cook_time(raw: str) -> str:
+    value = (raw or "").strip()
+    return value if value and value != "nan" else "N/A"
+
+
 def _tags_from_health(health_score_pct: int) -> List[str]:
     if health_score_pct >= 75:
         return ["Healthy"]
@@ -137,8 +142,7 @@ def search_recipes(body: SearchRequest):
     response: List[RecipeResponse] = []
     for r in results:
         health_pct = round(r["health_score"] * 100)
-        cook_time_raw = r.get("cook_time", "") or ""
-        cook_time = cook_time_raw.strip() if cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A"
+        cook_time = _parse_cook_time(r.get("cook_time", "") or "")
         response.append(
             RecipeResponse(
                 id=r["id"],
@@ -179,12 +183,7 @@ def get_recipes(body: RecipesRequest):
         health_pct = round(r["health_score"] * 100)
         match_pct = round(r["score"] * 100)
 
-        # Parse cook_time: prefer first number + "min", else use as-is or "N/A"
-        cook_time_raw = r.get("cook_time", "") or ""
-        if cook_time_raw and cook_time_raw.strip() and cook_time_raw.strip() != "nan":
-            cook_time = cook_time_raw.strip()
-        else:
-            cook_time = "N/A"
+        cook_time = _parse_cook_time(r.get("cook_time", "") or "")
 
         response.append(
             RecipeResponse(
