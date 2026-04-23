@@ -33,6 +33,9 @@ frontend/node_modules/
 .DS_Store
 Thumbs.db
 
+# ========== Data ==========
+data/raw/recipes.csv
+
 # ========== Archives ==========
 *.zip
 *.tar
