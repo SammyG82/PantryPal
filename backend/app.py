@@ -130,6 +130,7 @@ class CorrectRequest(BaseModel):
 
 class CorrectResponse(BaseModel):
     corrected: str
+    found: bool
 
 
 class SearchRequest(BaseModel):
@@ -141,8 +142,8 @@ class SearchRequest(BaseModel):
 def correct_ingredient_endpoint(body: CorrectRequest):
     from recipe_search import correct_ingredient
     df = get_df()
-    corrected = correct_ingredient(body.ingredient, df)
-    return CorrectResponse(corrected=corrected)
+    corrected, found = correct_ingredient(body.ingredient, df)
+    return CorrectResponse(corrected=corrected, found=found)
 
 
 @app.post("/api/search", response_model=List[RecipeResponse])

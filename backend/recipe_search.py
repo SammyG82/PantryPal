@@ -421,17 +421,17 @@ def _build_vocab(df: pd.DataFrame) -> set[str]:
     return _ingredient_vocab
 
 
-def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> str:
+def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> tuple[str, bool]:
     core = _clean_ingredient_to_core(user_input)
     if not core:
-        return user_input
+        return user_input.strip().title(), False
 
     vocab = _build_vocab(df)
     if not vocab:
-        return user_input
+        return user_input.strip().title(), False
 
     if core in vocab:
-        return core.title()
+        return core.title(), True
 
     best_match = None
     best_score = 0.0
@@ -442,9 +442,9 @@ def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.8
             best_match = candidate
 
     if best_match and best_score >= threshold:
-        return best_match.title()
+        return best_match.title(), True
 
-    return user_input.strip().title()
+    return user_input.strip().title(), False
 
 
 def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 20) -> List[Dict]:

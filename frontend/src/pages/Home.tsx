@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
@@ -18,6 +18,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
   const location = useLocation()
   const lastIngredients: string[] | undefined = location.state?.lastIngredients
   const uploadZoneRef = useRef<UploadZoneHandle>(null)
+  const [unsupported, setUnsupported] = useState<Set<string>>(new Set())
 
   const detectedIngredients = uploads
     .filter((u) => u.ingredient !== null && !u.detecting)
@@ -30,15 +31,20 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
     ),
   ]
 
-  const addIngredient = (value: string) => {
+  const addIngredient = (value: string, supported: boolean) => {
     const trimmed = value.trim()
     if (!trimmed) return
     if (allIngredients.some((i) => i.toLowerCase() === trimmed.toLowerCase())) return
     setTypedIngredients((prev) => [...prev, trimmed])
+    if (!supported) setUnsupported((prev) => new Set(prev).add(trimmed))
   }
 
   const removeIngredient = (index: number) => {
-    setTypedIngredients((prev) => prev.filter((_, i) => i !== index))
+    setTypedIngredients((prev) => {
+      const removed = prev[index]
+      setUnsupported((u) => { const next = new Set(u); next.delete(removed); return next })
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   const handleCook = () => {
@@ -95,6 +101,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
                     <IngredientChip
                       key={ing + i}
                       label={ing}
+                      unsupported={unsupported.has(ing)}
                       onRemove={() => removeIngredient(i)}
                     />
                   ))
@@ -111,7 +118,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
               {allIngredients.length > 0 && (
                 <div className="footer-chips">
                   {typedIngredients.map((ing, i) => (
-                    <IngredientChip key={ing + i} label={ing} onRemove={() => removeIngredient(i)} />
+                    <IngredientChip key={ing + i} label={ing} unsupported={unsupported.has(ing)} onRemove={() => removeIngredient(i)} />
                   ))}
                   {detectedIngredients
                     .filter((d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase()))

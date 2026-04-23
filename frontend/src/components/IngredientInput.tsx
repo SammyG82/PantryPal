@@ -4,7 +4,7 @@ import { toTitleCase } from '../utils'
 const API = import.meta.env.VITE_API_URL ?? ''
 
 interface IngredientInputProps {
-  onAdd: (value: string) => void
+  onAdd: (value: string, supported: boolean) => void
 }
 
 function IngredientInput({ onAdd }: IngredientInputProps) {
@@ -22,13 +22,13 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
         body: JSON.stringify({ ingredient: trimmed }),
       })
       if (res.ok) {
-        const data = await res.json() as { corrected: string }
-        onAdd(toTitleCase(data.corrected))
+        const data = await res.json() as { corrected: string; found: boolean }
+        onAdd(toTitleCase(data.corrected), data.found)
       } else {
-        onAdd(trimmed)
+        onAdd(trimmed, false)
       }
     } catch {
-      onAdd(trimmed)
+      onAdd(trimmed, false)
     }
   }
 

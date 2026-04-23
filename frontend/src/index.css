@@ -47,6 +47,10 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .add-btn:hover{background:var(--ink)}
 .chip-list{display:flex;flex-wrap:wrap;gap:6px;min-height:40px}
 .chip{display:inline-flex;align-items:center;gap:5px;background:var(--sage-bg);border:1px solid var(--sage-light);color:var(--sage);font-size:0.78rem;padding:4px 11px;border-radius:50px}
+.chip-unsupported{background:var(--gold-light);border-color:var(--gold);color:#6B4A00}
+.chip-warn-icon{font-size:0.7rem;position:relative;display:inline-flex;align-items:center}
+.chip-warn-icon .chip-tooltip{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--ink);color:var(--cream);font-size:0.7rem;white-space:nowrap;padding:4px 8px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:10}
+.chip-warn-icon:hover .chip-tooltip{opacity:1}
 .chip-x{cursor:pointer;opacity:0.5;font-size:1rem;line-height:1;transition:opacity .2s;border:none;background:none;color:var(--sage);padding:0}
 .chip-x:hover{opacity:1}
 .empty-hint{font-size:0.78rem;color:var(--muted);font-style:italic;padding:10px 0;font-weight:300}
