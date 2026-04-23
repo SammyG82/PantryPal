@@ -20,6 +20,7 @@ function Results() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     if (!ingredients) return
@@ -96,9 +97,9 @@ function Results() {
   const displayRecipes = searchReady
     ? searchResults!.filter((r) => r.match_score > 0)
     : recipes
-  const sorted = [...displayRecipes].sort((a, b) =>
-    sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score
-  )
+  const sorted = [...displayRecipes]
+    .sort((a, b) => sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score)
+    .slice(0, isSearching ? undefined : 9)
 
   return (
     <div>
@@ -162,6 +163,55 @@ function Results() {
           {sorted.map((recipe, i) => (
             <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />
           ))}
+        </div>
+      )}
+
+      <button className="info-btn" onClick={() => setShowInfo(true)} aria-label="How scores are calculated">?</button>
+
+      {showInfo && (
+        <div className="info-overlay" onClick={() => setShowInfo(false)}>
+          <div className="info-modal" onClick={e => e.stopPropagation()}>
+            <div className="info-modal-header">
+              <span className="info-modal-title">How we rank recipes</span>
+              <button className="info-close" onClick={() => setShowInfo(false)}>×</button>
+            </div>
+
+            <div className="info-section">
+              <div className="info-section-title">Best Match</div>
+              <div className="info-row">
+                <div className="info-row-label">Recipe coverage<span>% of recipe's ingredients you have</span></div>
+                <div className="info-row-pct">60%</div>
+              </div>
+              <div className="info-row">
+                <div className="info-row-label">Ingredient use<span>% of your ingredients the recipe uses</span></div>
+                <div className="info-row-pct">25%</div>
+              </div>
+              <div className="info-row">
+                <div className="info-row-label">Overlap<span>Jaccard similarity between both sets</span></div>
+                <div className="info-row-pct">15%</div>
+              </div>
+            </div>
+
+            <div className="info-section">
+              <div className="info-section-title">Healthiest</div>
+              <div className="info-row">
+                <div className="info-row-label">Protein<span>Target: 25g per serving</span></div>
+                <div className="info-row-pct">35%</div>
+              </div>
+              <div className="info-row">
+                <div className="info-row-label">Fiber<span>Target: 8g per serving</span></div>
+                <div className="info-row-pct">25%</div>
+              </div>
+              <div className="info-row">
+                <div className="info-row-label">Sugar<span>Penalty above 30g</span></div>
+                <div className="info-row-pct">20%</div>
+              </div>
+              <div className="info-row">
+                <div className="info-row-label">Calories<span>Penalty above 800 kcal</span></div>
+                <div className="info-row-pct">20%</div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

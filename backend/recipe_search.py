@@ -264,26 +264,25 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
 # -------------------------------------------------
 def _compute_health_score(row: pd.Series) -> float:
     protein = float(row.get("protein_g", 0.0) or 0.0)
-    fat = float(row.get("fat_g", 0.0) or 0.0)
+    fiber = float(row.get("fiber_g", 0.0) or 0.0)
     sugar = float(row.get("sugar_g", 0.0) or 0.0)
-    carbs = float(row.get("carbs_g", 0.0) or 0.0)
-    net_carbs = max(carbs, 0.0)
+    calories = float(row.get("calories", 0) or 0)
 
-    PROTEIN_TARGET = 20.0
-    FAT_LIMIT = 25.0
-    SUGAR_LIMIT = 40.0
-    NET_CARBS_LIMIT = 120.0
+    PROTEIN_TARGET = 25.0
+    FIBER_TARGET = 8.0
+    SUGAR_LIMIT = 30.0
+    CALORIE_LIMIT = 800.0
 
     protein_score = min(protein / PROTEIN_TARGET, 1.0)
-    fat_score = 1.0 - min(fat / FAT_LIMIT, 1.0)
+    fiber_score = min(fiber / FIBER_TARGET, 1.0)
     sugar_score = 1.0 - min(sugar / SUGAR_LIMIT, 1.0)
-    net_carbs_score = 1.0 - min(net_carbs / NET_CARBS_LIMIT, 1.0)
+    calorie_score = 1.0 - min(calories / CALORIE_LIMIT, 1.0)
 
     health = (
-        0.40 * protein_score +
-        0.25 * fat_score +
+        0.35 * protein_score +
+        0.25 * fiber_score +
         0.20 * sugar_score +
-        0.15 * net_carbs_score
+        0.20 * calorie_score
     )
     return float(max(0.0, min(1.0, health)))
 
@@ -325,7 +324,7 @@ def _fuzzy_intersection(
 def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
-    quota: int = 7,
+    quota: int = 9,
 ) -> List[Dict]:
     if not user_ings:
         return []
@@ -366,7 +365,7 @@ def match_recipes(
         pct_user = matches / len(user_cores) if user_cores else 0.0
         union_size = len(user_cores | recipe_set)
         jaccard = matches / union_size if union_size > 0 else 0.0
-        match_score = 0.7 * pct_recipe + 0.3 * jaccard
+        match_score = 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
         health_score = _compute_health_score(row)
 
         # Parse servings as integer if possible
