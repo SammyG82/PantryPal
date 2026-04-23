@@ -15,10 +15,8 @@ export interface Recipe {
   fat: number
   carbs: number
   cook_time: string
-  servings: number | null
   matched_count: number
   total_ingredients: number
   tags: string[]
   url: string
-  img_src: string
 }

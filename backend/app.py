@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import io
-import re
-from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,9 +33,15 @@ _model_loaded = False
 def get_df():
     global _df
     if _df is None:
-        from recipe_search import load_recipes
+        from recipe_search import load_recipes, _build_inverted_index
         _df = load_recipes()
+        _build_inverted_index(_df)
     return _df
+
+
+@app.on_event("startup")
+def preload():
+    get_df()
 
 
 def get_predictor():
@@ -63,12 +67,10 @@ class RecipeResponse(BaseModel):
     fat: float
     carbs: float
     cook_time: str
-    servings: Optional[int]
     matched_count: int
     total_ingredients: int
     tags: List[str]
     url: str
-    img_src: str
 
 
 class DetectResponse(BaseModel):
@@ -171,12 +173,10 @@ def search_recipes(body: SearchRequest):
                 fat=round(r.get("fat_g", 0.0) or 0.0, 1),
                 carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
                 cook_time=cook_time,
-                servings=r.get("servings"),
                 matched_count=r["matches"],
                 total_ingredients=r["recipe_size"],
                 tags=_tags_from_health(health_pct),
                 url=r.get("url", "") or "",
-                img_src=r.get("img_src", "") or "",
             )
         )
     return response
@@ -193,7 +193,7 @@ def get_recipes(body: RecipesRequest):
     from recipe_search import match_recipes
 
     df = get_df()
-    results = match_recipes(body.ingredients, df, quota=10)
+    results = match_recipes(body.ingredients, df)
 
     response: List[RecipeResponse] = []
     for r in results:
@@ -213,12 +213,10 @@ def get_recipes(body: RecipesRequest):
                 fat=round(r.get("fat_g", 0.0) or 0.0, 1),
                 carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
                 cook_time=cook_time,
-                servings=r.get("servings"),
                 matched_count=r["matches"],
                 total_ingredients=r["recipe_size"],
                 tags=_tags_from_health(health_pct),
                 url=r.get("url", "") or "",
-                img_src=r.get("img_src", "") or "",
             )
         )
 

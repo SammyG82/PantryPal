@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { Recipe } from '../types'
 
 const TAG_CLASSES: Record<string, string> = {
@@ -61,24 +60,18 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
     fat,
     carbs,
     cook_time,
-    servings,
     matched_count,
     total_ingredients,
     tags,
     url,
-    img_src,
   } = recipe
 
-  const [imgError, setImgError] = useState(false)
   const primaryScore = sortMode === 'health' ? health_score : match_score
 
   return (
     <div className="recipe-card">
       <div className="recipe-img" style={{ background: getGradient(tags) }}>
-        {img_src && !imgError
-          ? <img src={img_src} alt={name} onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : getEmoji(name)
-        }
+        {getEmoji(name)}
         <span className="rank-badge">#{rank}</span>
         <span className={`score-badge ${getScoreClass(primaryScore)}`}>
           {primaryScore}%
@@ -96,7 +89,6 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
 
         <div className="recipe-meta">
           <span>⏱ {cook_time || 'N/A'}</span>
-          <span>👤 {servings ?? '–'} servings</span>
           <span>{matched_count} of {total_ingredients} ingredients</span>
         </div>
 

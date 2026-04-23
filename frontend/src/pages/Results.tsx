@@ -196,19 +196,15 @@ function Results() {
               <div className="info-section-title">Healthiest</div>
               <div className="info-row">
                 <div className="info-row-label">Protein<span>Target: 25g per serving</span></div>
-                <div className="info-row-pct">35%</div>
-              </div>
-              <div className="info-row">
-                <div className="info-row-label">Fiber<span>Target: 8g per serving</span></div>
-                <div className="info-row-pct">25%</div>
+                <div className="info-row-pct">45%</div>
               </div>
               <div className="info-row">
                 <div className="info-row-label">Sugar<span>Penalty above 30g</span></div>
-                <div className="info-row-pct">20%</div>
+                <div className="info-row-pct">25%</div>
               </div>
               <div className="info-row">
                 <div className="info-row-label">Calories<span>Penalty above 800 kcal</span></div>
-                <div className="info-row-pct">20%</div>
+                <div className="info-row-pct">30%</div>
               </div>
             </div>
           </div>

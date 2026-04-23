@@ -5,7 +5,7 @@ interface SortOption {
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'match', label: 'Best match' },
-  { key: 'health', label: 'Healthiest first' },
+  { key: 'health', label: 'Healthiest' },
 ]
 
 interface SortBarProps {

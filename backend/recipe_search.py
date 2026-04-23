@@ -228,33 +228,21 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     else:
         out["url"] = ""
 
-    if "img_src" in df.columns:
-        out["img_src"] = df["img_src"].fillna("").astype(str)
-    else:
-        out["img_src"] = ""
-
     # Nutrition parsing
     if "nutrition" in df.columns:
         out["calories"] = df["nutrition"].apply(_extract_calories)
         out["protein_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Protein"))
         out["fat_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Fat"))
-        out["fiber_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Dietary Fiber"))
         out["sugar_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Sugars"))
         out["carbs_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Carbohydrate"))
     else:
-        for col in ["calories", "protein_g", "fat_g", "fiber_g", "sugar_g", "carbs_g"]:
+        for col in ["calories", "protein_g", "fat_g", "sugar_g", "carbs_g"]:
             out[col] = 0.0
 
-    # Cook time and servings
     if "cook_time" in df.columns:
         out["cook_time"] = df["cook_time"].fillna("").astype(str)
     else:
         out["cook_time"] = ""
-
-    if "servings" in df.columns:
-        out["servings"] = df["servings"].fillna("").astype(str)
-    else:
-        out["servings"] = ""
 
     return out
 
@@ -264,25 +252,21 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
 # -------------------------------------------------
 def _compute_health_score(row: pd.Series) -> float:
     protein = float(row.get("protein_g", 0.0) or 0.0)
-    fiber = float(row.get("fiber_g", 0.0) or 0.0)
     sugar = float(row.get("sugar_g", 0.0) or 0.0)
     calories = float(row.get("calories", 0) or 0)
 
     PROTEIN_TARGET = 25.0
-    FIBER_TARGET = 8.0
     SUGAR_LIMIT = 30.0
     CALORIE_LIMIT = 800.0
 
     protein_score = min(protein / PROTEIN_TARGET, 1.0)
-    fiber_score = min(fiber / FIBER_TARGET, 1.0)
     sugar_score = 1.0 - min(sugar / SUGAR_LIMIT, 1.0)
     calorie_score = 1.0 - min(calories / CALORIE_LIMIT, 1.0)
 
     health = (
-        0.35 * protein_score +
-        0.25 * fiber_score +
-        0.20 * sugar_score +
-        0.20 * calorie_score
+        0.45 * protein_score +
+        0.25 * sugar_score +
+        0.30 * calorie_score
     )
     return float(max(0.0, min(1.0, health)))
 
@@ -338,9 +322,21 @@ def match_recipes(
     if not user_cores:
         return []
 
+    # Use inverted index to find candidate recipes without scanning all rows
+    inv = _build_inverted_index(df)
+    candidate_indices: set[int] = set()
+    for user_core in user_cores:
+        for key, row_indices in inv.items():
+            if user_core == key or fuzz.ratio(user_core, key) / 100.0 >= 0.82:
+                candidate_indices.update(row_indices)
+
+    if not candidate_indices:
+        return []
+
     candidates: List[Dict] = []
 
-    for idx, row in df.iterrows():
+    for idx in candidate_indices:
+        row = df.iloc[idx]
         recipe_cores = row["ingredients_norm"]
         if not recipe_cores:
             continue
@@ -368,37 +364,23 @@ def match_recipes(
         match_score = 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
         health_score = _compute_health_score(row)
 
-        # Parse servings as integer if possible
-        servings_raw = str(row.get("servings", "") or "")
-        servings_int = None
-        m = re.search(r"(\d+)", servings_raw)
-        if m:
-            try:
-                servings_int = int(m.group(1))
-            except ValueError:
-                pass
-
         candidates.append({
-            "id":             int(idx),
-            "name":           row["display_name"],
-            "matches":        matches,
-            "pct_recipe":     pct_recipe,
-            "pct_user":       pct_user,
-            "score":          match_score,
-            "jaccard":        jaccard,
-            "recipe_size":    recipe_size,
-            "health_score":   health_score,
-            "protein_g":      float(row.get("protein_g", 0.0) or 0.0),
-            "fat_g":          float(row.get("fat_g", 0.0) or 0.0),
-            "sugar_g":        float(row.get("sugar_g", 0.0) or 0.0),
-            "carbs_g":        float(row.get("carbs_g", 0.0) or 0.0),
-            "calories":       int(row.get("calories", 0) or 0),
-            "cook_time":      str(row.get("cook_time", "") or ""),
-            "servings":       servings_int,
-            "url":            str(row.get("url", "") or ""),
-            "img_src":        str(row.get("img_src", "") or ""),
-            "matched_cores":  sorted(matched_ingredients),
-            "user_cores":     sorted(user_cores),
+            "id":           int(idx),
+            "name":         row["display_name"],
+            "matches":      matches,
+            "pct_recipe":   pct_recipe,
+            "pct_user":     pct_user,
+            "score":        match_score,
+            "jaccard":      jaccard,
+            "recipe_size":  recipe_size,
+            "health_score": health_score,
+            "protein_g":    float(row.get("protein_g", 0.0) or 0.0),
+            "fat_g":        float(row.get("fat_g", 0.0) or 0.0),
+            "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
+            "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
+            "calories":     int(row.get("calories", 0) or 0),
+            "cook_time":    str(row.get("cook_time", "") or ""),
+            "url":          str(row.get("url", "") or ""),
         })
 
     if not candidates:
@@ -409,16 +391,25 @@ def match_recipes(
 
 
 _ingredient_vocab: set[str] | None = None
+_inverted_index: dict[str, list[int]] | None = None
+
+
+def _build_inverted_index(df: pd.DataFrame) -> dict[str, list[int]]:
+    global _inverted_index, _ingredient_vocab
+    if _inverted_index is None:
+        idx: dict[str, list[int]] = {}
+        for i, cores in enumerate(df["ingredients_norm"]):
+            for core in cores:
+                idx.setdefault(core, []).append(i)
+        _inverted_index = idx
+        if _ingredient_vocab is None:
+            _ingredient_vocab = set(idx.keys())
+    return _inverted_index
 
 
 def _build_vocab(df: pd.DataFrame) -> set[str]:
-    global _ingredient_vocab
-    if _ingredient_vocab is None:
-        vocab: set[str] = set()
-        for cores in df["ingredients_norm"]:
-            vocab.update(cores)
-        _ingredient_vocab = vocab
-    return _ingredient_vocab
+    _build_inverted_index(df)  # builds vocab as a side effect
+    return _ingredient_vocab  # type: ignore[return-value]
 
 
 def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> tuple[str, bool]:
@@ -464,14 +455,6 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     results = []
     for idx, row in matches.iterrows():
         health_score = _compute_health_score(row)
-        servings_raw = str(row.get("servings", "") or "")
-        servings_int = None
-        m = re.search(r"(\d+)", servings_raw)
-        if m:
-            try:
-                servings_int = int(m.group(1))
-            except ValueError:
-                pass
         cook_time_raw = str(row.get("cook_time", "") or "")
 
         recipe_set = set(row["ingredients_norm"])
@@ -482,26 +465,24 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             pct_recipe = match_count / recipe_size
             union_size = len(user_cores | recipe_set)
             jaccard = match_count / union_size if union_size > 0 else 0.0
-            score = 0.7 * pct_recipe + 0.3 * jaccard
+            score = 0.6 * pct_recipe + 0.25 * (match_count / len(user_cores)) + 0.15 * jaccard
         else:
             match_count = 0
             score = 0.0
 
         results.append({
-            "id":          int(idx),
-            "name":        row["display_name"],
-            "matches":     match_count,
-            "score":       score,
-            "recipe_size": recipe_size,
+            "id":           int(idx),
+            "name":         row["display_name"],
+            "matches":      match_count,
+            "score":        score,
+            "recipe_size":  recipe_size,
             "health_score": health_score,
-            "protein_g":   float(row.get("protein_g", 0.0) or 0.0),
-            "fat_g":       float(row.get("fat_g", 0.0) or 0.0),
-            "sugar_g":     float(row.get("sugar_g", 0.0) or 0.0),
-            "carbs_g":     float(row.get("carbs_g", 0.0) or 0.0),
-            "calories":    int(row.get("calories", 0) or 0),
-            "cook_time":   cook_time_raw if cook_time_raw and cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A",
-            "servings":    servings_int,
-            "url":         str(row.get("url", "") or ""),
-            "img_src":     str(row.get("img_src", "") or ""),
+            "protein_g":    float(row.get("protein_g", 0.0) or 0.0),
+            "fat_g":        float(row.get("fat_g", 0.0) or 0.0),
+            "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
+            "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
+            "calories":     int(row.get("calories", 0) or 0),
+            "cook_time":    cook_time_raw if cook_time_raw and cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A",
+            "url":          str(row.get("url", "") or ""),
         })
     return results
