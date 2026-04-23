@@ -161,24 +161,41 @@ def _extract_calories(text: str) -> int:
 
 
 # -------------------------------------------------
+# HUGGINGFACE AUTO-DOWNLOAD
+# -------------------------------------------------
+_RECIPES_HF_REPO = "SammyG82/pantrypal-data"
+_RECIPES_DEFAULT = BASE_DIR.parent / "data" / "raw" / "recipes.csv"
+
+
+def _ensure_recipes(path: Path) -> None:
+    if path.exists():
+        return
+    try:
+        from huggingface_hub import hf_hub_download
+        print("Downloading recipes.csv from HuggingFace...")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        hf_hub_download(
+            repo_id=_RECIPES_HF_REPO,
+            filename="recipes.csv",
+            repo_type="dataset",
+            local_dir=str(path.parent),
+        )
+        print("Downloaded recipes.csv")
+    except Exception as e:
+        raise RuntimeError(f"recipes.csv not found and download failed: {e}") from e
+
+
+# -------------------------------------------------
 # LOAD & PREPARE DATAFRAME
 # -------------------------------------------------
 def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     if csv_path is None:
-        csv_path = BASE_DIR.parent / "data" / "raw" / "recipes.csv"
+        csv_path = _RECIPES_DEFAULT
 
     p = Path(csv_path)
     if not p.is_absolute():
         p = BASE_DIR / p
-    if not p.exists():
-        for alt in [
-            BASE_DIR.parent / "data" / "raw" / "recipes.csv",
-            BASE_DIR.parent / "data" / "cleaned" / "recipes.csv",
-            BASE_DIR / "recipes.csv",
-        ]:
-            if alt.exists():
-                p = alt
-                break
+    _ensure_recipes(p)
 
     df = pd.read_csv(p)
 
