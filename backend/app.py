@@ -124,9 +124,25 @@ async def detect_ingredients(file: UploadFile = File(...)):
     return DetectResponse(ingredients=ingredients)
 
 
+class CorrectRequest(BaseModel):
+    ingredient: str
+
+
+class CorrectResponse(BaseModel):
+    corrected: str
+
+
 class SearchRequest(BaseModel):
     q: str
     ingredients: List[str] = []
+
+
+@app.post("/api/correct", response_model=CorrectResponse)
+def correct_ingredient_endpoint(body: CorrectRequest):
+    from recipe_search import correct_ingredient
+    df = get_df()
+    corrected = correct_ingredient(body.ingredient, df)
+    return CorrectResponse(corrected=corrected)
 
 
 @app.post("/api/search", response_model=List[RecipeResponse])

@@ -408,6 +408,45 @@ def match_recipes(
     return candidates[:quota]
 
 
+_ingredient_vocab: set[str] | None = None
+
+
+def _build_vocab(df: pd.DataFrame) -> set[str]:
+    global _ingredient_vocab
+    if _ingredient_vocab is None:
+        vocab: set[str] = set()
+        for cores in df["ingredients_norm"]:
+            vocab.update(cores)
+        _ingredient_vocab = vocab
+    return _ingredient_vocab
+
+
+def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> str:
+    core = _clean_ingredient_to_core(user_input)
+    if not core:
+        return user_input
+
+    vocab = _build_vocab(df)
+    if not vocab:
+        return user_input
+
+    if core in vocab:
+        return core.title()
+
+    best_match = None
+    best_score = 0.0
+    for candidate in vocab:
+        score = fuzz.ratio(core, candidate) / 100.0
+        if score > best_score:
+            best_score = score
+            best_match = candidate
+
+    if best_match and best_score >= threshold:
+        return best_match.title()
+
+    return user_input.strip().title()
+
+
 def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 20) -> List[Dict]:
     if not query.strip():
         return []

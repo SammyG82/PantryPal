@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react'
+import { toTitleCase } from '../utils'
 import IngredientChip from './IngredientChip'
 import type { Upload } from '../types'
 
@@ -49,7 +50,8 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
         const res = await fetch(`${API}/api/detect`, { method: 'POST', body: formData })
         if (res.ok) {
           const data = await res.json() as { ingredients: string[] }
-          const ingredient = data.ingredients?.[0] ?? null
+          const raw = data.ingredients?.[0] ?? null
+          const ingredient = raw ? toTitleCase(raw) : null
           setUploads((prev) => {
             const updated = prev.map((u) =>
               u.id === id ? { ...u, ingredient, detecting: false } : u
