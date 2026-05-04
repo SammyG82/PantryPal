@@ -180,6 +180,24 @@ def _ensure_recipes(path: Path) -> None:
 
 # -------------------------------------------------
 # LOAD & PREPARE DATAFRAME
+_HR_RE = re.compile(r"^(\d+)\s*hr(?:\s+(\d+)\s*mins?)?$")
+
+
+def _normalise_cook_time(raw: str) -> str:
+    value = raw.strip()
+    if not value or value == "nan":
+        return "N/A"
+    m = _HR_RE.match(value)
+    if m:
+        hours = int(m.group(1))
+        if hours >= 24:
+            days = hours // 24
+            remaining = hours % 24
+            label = f"{days} day{'s' if days != 1 else ''}"
+            return f"{label} {remaining} hr" if remaining else label
+    return value
+
+
 # -------------------------------------------------
 def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     if csv_path is None:
@@ -250,7 +268,7 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
             out[col] = 0.0
 
     if "cook_time" in df.columns:
-        out["cook_time"] = df["cook_time"].fillna("").astype(str)
+        out["cook_time"] = df["cook_time"].fillna("").astype(str).apply(_normalise_cook_time)
     else:
         out["cook_time"] = ""
 

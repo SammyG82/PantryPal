@@ -81,7 +81,7 @@ class DetectResponse(BaseModel):
 # -------------------------------------------------
 def _parse_cook_time(raw: str) -> str:
     value = (raw or "").strip()
-    return value if value and value != "nan" else "N/A"
+    return value if value and value != "N/A" else "N/A"
 
 
 def _tags_from_health(health_score_pct: int) -> List[str]:
