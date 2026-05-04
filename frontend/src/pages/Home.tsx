@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
@@ -19,6 +19,21 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
   const lastIngredients: string[] | undefined = location.state?.lastIngredients
   const uploadZoneRef = useRef<UploadZoneHandle>(null)
   const [unsupported, setUnsupported] = useState<Set<string>>(new Set())
+  const [recent, setRecent] = useState<{ ingredients: string[]; unsupported: string[] } | null>(null)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('pantrypal_recent')
+    if (!saved) return
+    try {
+      const parsed = JSON.parse(saved)
+      const age = Date.now() - (parsed.savedAt ?? 0)
+      if (age > 24 * 60 * 60 * 1000 || !Array.isArray(parsed.ingredients) || !Array.isArray(parsed.unsupported)) {
+        localStorage.removeItem('pantrypal_recent')
+        return
+      }
+      setRecent(parsed)
+    } catch { /* ignore */ }
+  }, [])
 
   const detectedIngredients = uploads
     .filter((u) => u.ingredient !== null && !u.detecting)
@@ -49,8 +64,25 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
 
   const handleCook = () => {
     if (allIngredients.length === 0) return
+    const prevIngredients = recent?.ingredients ?? []
+    const prevUnsupported = recent?.unsupported ?? []
+    const merged = [
+      ...allIngredients,
+      ...prevIngredients.filter(
+        (p) => !allIngredients.some((a) => a.toLowerCase() === p.toLowerCase())
+      ),
+    ].slice(0, 10)
+    localStorage.setItem('pantrypal_recent', JSON.stringify({
+      ingredients: merged,
+      unsupported: [...new Set([...unsupported, ...prevUnsupported])],
+      savedAt: Date.now(),
+    }))
     navigate('/results', { state: { ingredients: allIngredients } })
   }
+
+  const recentAvailable = recent?.ingredients.filter(
+    (r) => !allIngredients.some((i) => i.toLowerCase() === r.toLowerCase())
+  ) ?? []
 
   return (
     <div>
@@ -107,6 +139,22 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
                   ))
                 )}
               </div>
+              {recentAvailable.length > 0 && (
+                <div className="recent-row">
+                  <span className="recent-label">Recently used</span>
+                  <div className="recent-chips">
+                    {recentAvailable.map((ing) => (
+                      <button
+                        key={ing}
+                        className="recent-chip"
+                        onClick={() => addIngredient(ing, !recent?.unsupported.includes(ing))}
+                      >
+                        + {ing}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
