@@ -32,6 +32,12 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
         return
       }
       setRecent(parsed)
+      const restored = new Set(
+        typedIngredients.filter((t) =>
+          parsed.unsupported.some((u: string) => u.toLowerCase() === t.toLowerCase())
+        )
+      )
+      if (restored.size > 0) setUnsupported(restored)
     } catch { /* ignore */ }
   }, [])
 
@@ -131,7 +137,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
                 ) : (
                   typedIngredients.map((ing, i) => (
                     <IngredientChip
-                      key={ing + i}
+                      key={ing}
                       label={ing}
                       unsupported={unsupported.has(ing)}
                       onRemove={() => removeIngredient(i)}
@@ -166,7 +172,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
               {allIngredients.length > 0 && (
                 <div className="footer-chips">
                   {typedIngredients.map((ing, i) => (
-                    <IngredientChip key={ing + i} label={ing} unsupported={unsupported.has(ing)} onRemove={() => removeIngredient(i)} />
+                    <IngredientChip key={ing} label={ing} unsupported={unsupported.has(ing)} onRemove={() => removeIngredient(i)} />
                   ))}
                   {detectedIngredients
                     .filter((d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase()))

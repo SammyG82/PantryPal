@@ -127,13 +127,6 @@ def _normalize_list(xs: List[str]) -> List[str]:
     return normed
 
 
-def _pick_col(df: pd.DataFrame, candidates: List[str]) -> str | None:
-    for name in candidates:
-        if name in df.columns:
-            return name
-    return None
-
-
 def _extract_grams(text: str, label: str) -> float:
     if not isinstance(text, str):
         return 0.0
@@ -374,8 +367,8 @@ def match_recipes(
         if matches == 0:
             continue
 
-        pct_recipe = matches / recipe_size if recipe_size > 0 else 0.0
-        pct_user = matches / len(user_cores) if user_cores else 0.0
+        pct_recipe = matches / recipe_size
+        pct_user = matches / len(user_cores)
         union_size = len(user_cores | recipe_set)
         jaccard = matches / union_size if union_size > 0 else 0.0
         match_score = 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
@@ -499,7 +492,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
             "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
             "calories":     int(row.get("calories", 0) or 0),
-            "cook_time":    cook_time_raw if cook_time_raw and cook_time_raw.strip() and cook_time_raw.strip() != "nan" else "N/A",
+            "cook_time":    cook_time_raw,
             "url":          str(row.get("url", "") or ""),
         })
     return results

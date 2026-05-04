@@ -23,7 +23,7 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
       })
       if (res.ok) {
         const data = await res.json() as { corrected: string; found: boolean }
-        onAdd(toTitleCase(data.corrected), data.found)
+        onAdd(data.corrected, data.found)
       } else {
         onAdd(trimmed, false)
       }
@@ -45,7 +45,7 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
       />
-      <button className="add-btn" onClick={() => void handleSubmit()}>
+      <button type="button" className="add-btn" onClick={() => void handleSubmit()}>
         Add
       </button>
     </div>

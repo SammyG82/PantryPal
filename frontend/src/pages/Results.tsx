@@ -50,8 +50,10 @@ function Results() {
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults(null)
+      setSearching(false)
       return
     }
+    let cancelled = false
     const timer = setTimeout(async () => {
       setSearching(true)
       try {
@@ -60,19 +62,19 @@ function Results() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [] }),
         })
+        if (cancelled) return
         if (res.ok) {
-          const data = await res.json() as Recipe[]
-          setSearchResults(data)
+          setSearchResults(await res.json() as Recipe[])
         } else {
           setSearchResults(null)
         }
       } catch {
-        setSearchResults(null)
+        if (!cancelled) setSearchResults(null)
       } finally {
-        setSearching(false)
+        if (!cancelled) setSearching(false)
       }
     }, 300)
-    return () => clearTimeout(timer)
+    return () => { clearTimeout(timer); cancelled = true }
   }, [searchQuery, ingredients])
 
   if (!ingredients) return (

@@ -35,6 +35,7 @@ function SortBar({ current, onChange, count, searchQuery, onSearchChange }: Sort
         className="recipe-search"
         type="text"
         placeholder="Search all recipes…"
+        aria-label="Search recipes by name"
         value={searchQuery}
         onChange={(e) => onSearchChange(e.target.value)}
       />

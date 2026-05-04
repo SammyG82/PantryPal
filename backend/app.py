@@ -27,7 +27,6 @@ app.add_middleware(
 # even if the model isn't present
 # -------------------------------------------------
 _df = None
-_model_loaded = False
 
 
 def get_df():
@@ -78,7 +77,7 @@ class DetectResponse(BaseModel):
 
 
 # -------------------------------------------------
-# Tag helper
+# Response helpers
 # -------------------------------------------------
 def _parse_cook_time(raw: str) -> str:
     value = (raw or "").strip()
@@ -92,6 +91,25 @@ def _tags_from_health(health_score_pct: int) -> List[str]:
         return ["Balanced"]
     else:
         return ["Indulgent"]
+
+
+def _to_recipe_response(r: dict) -> RecipeResponse:
+    health_pct = round(r["health_score"] * 100)
+    return RecipeResponse(
+        id=r["id"],
+        name=r["name"],
+        match_score=round(r["score"] * 100),
+        health_score=health_pct,
+        calories=r.get("calories", 0) or 0,
+        protein=round(r.get("protein_g", 0.0) or 0.0, 1),
+        fat=round(r.get("fat_g", 0.0) or 0.0, 1),
+        carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
+        cook_time=_parse_cook_time(r.get("cook_time", "") or ""),
+        matched_count=r["matches"],
+        total_ingredients=r["recipe_size"],
+        tags=_tags_from_health(health_pct),
+        url=r.get("url", "") or "",
+    )
 
 
 # -------------------------------------------------
@@ -158,28 +176,7 @@ def search_recipes(body: SearchRequest):
     df = get_df()
     results = search_by_name(body.q, df, user_ings=body.ingredients or None)
 
-    response: List[RecipeResponse] = []
-    for r in results:
-        health_pct = round(r["health_score"] * 100)
-        cook_time = _parse_cook_time(r.get("cook_time", "") or "")
-        response.append(
-            RecipeResponse(
-                id=r["id"],
-                name=r["name"],
-                match_score=round(r["score"] * 100),
-                health_score=health_pct,
-                calories=r.get("calories", 0) or 0,
-                protein=round(r.get("protein_g", 0.0) or 0.0, 1),
-                fat=round(r.get("fat_g", 0.0) or 0.0, 1),
-                carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
-                cook_time=cook_time,
-                matched_count=r["matches"],
-                total_ingredients=r["recipe_size"],
-                tags=_tags_from_health(health_pct),
-                url=r.get("url", "") or "",
-            )
-        )
-    return response
+    return [_to_recipe_response(r) for r in results]
 
 
 @app.post("/api/recipes", response_model=List[RecipeResponse])
@@ -195,32 +192,7 @@ def get_recipes(body: RecipesRequest):
     df = get_df()
     results = match_recipes(body.ingredients, df)
 
-    response: List[RecipeResponse] = []
-    for r in results:
-        health_pct = round(r["health_score"] * 100)
-        match_pct = round(r["score"] * 100)
-
-        cook_time = _parse_cook_time(r.get("cook_time", "") or "")
-
-        response.append(
-            RecipeResponse(
-                id=r["id"],
-                name=r["name"],
-                match_score=match_pct,
-                health_score=health_pct,
-                calories=r.get("calories", 0) or 0,
-                protein=round(r.get("protein_g", 0.0) or 0.0, 1),
-                fat=round(r.get("fat_g", 0.0) or 0.0, 1),
-                carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
-                cook_time=cook_time,
-                matched_count=r["matches"],
-                total_ingredients=r["recipe_size"],
-                tags=_tags_from_health(health_pct),
-                url=r.get("url", "") or "",
-            )
-        )
-
-    return response
+    return [_to_recipe_response(r) for r in results]
 
 
 if __name__ == "__main__":

@@ -148,7 +148,7 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
         </div>
 
         {url && (
-          <button className="view-btn" onClick={() => window.open(url, '_blank')}>View full recipe →</button>
+          <a className="view-btn" href={url} target="_blank" rel="noopener noreferrer">View full recipe →</a>
         )}
       </div>
     </div>

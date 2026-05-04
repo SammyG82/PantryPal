@@ -103,8 +103,7 @@ test_transform = transforms.Compose([
 # PREDICT
 # -------------------------
 def predict_image(image: Image.Image) -> str:
-    img = image.convert("RGB")
-    x = test_transform(img).unsqueeze(0).to(device)
+    x = test_transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         logits, _ = model(x)
