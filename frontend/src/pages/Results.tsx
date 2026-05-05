@@ -17,10 +17,12 @@ function Results() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState('match')
+  const handleSortChange = (mode: string) => { setSortMode(mode); setVisibleCount(9) }
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(9)
 
   useEffect(() => {
     if (!ingredients) return
@@ -101,7 +103,8 @@ function Results() {
     : recipes
   const sorted = [...displayRecipes]
     .sort((a, b) => sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score)
-    .slice(0, isSearching ? undefined : 9)
+  const visible = isSearching ? sorted : sorted.slice(0, visibleCount)
+  const hasMore = !isSearching && visibleCount < sorted.length
 
   return (
     <div>
@@ -116,8 +119,8 @@ function Results() {
 
       <SortBar
         current={sortMode}
-        onChange={setSortMode}
-        count={(loading || searching) ? undefined : sorted.length}
+        onChange={handleSortChange}
+        count={(loading || searching) ? undefined : visible.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
@@ -137,7 +140,7 @@ function Results() {
         </div>
       )}
 
-      {!loading && !error && !searching && sorted.length === 0 && (!isSearching || searchReady) && (
+      {!loading && !error && !searching && visible.length === 0 && (!isSearching || searchReady) && (
         <div className="empty-state">
           {isSearching ? (
             <>
@@ -160,12 +163,24 @@ function Results() {
         </div>
       )}
 
-      {!loading && !error && sorted.length > 0 && (
-        <div className="recipe-grid">
-          {sorted.map((recipe, i) => (
-            <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />
-          ))}
-        </div>
+      {!loading && !error && visible.length > 0 && (
+        <>
+          <div className="recipe-grid">
+            {visible.map((recipe, i) => (
+              <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />
+            ))}
+          </div>
+          {hasMore && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem 0 3rem' }}>
+              <button
+                style={{ padding: '12px 36px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.95rem', fontWeight: 500 }}
+                onClick={() => setVisibleCount(c => c + 9)}
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <button className="info-btn" onClick={() => setShowInfo(true)} aria-label="How scores are calculated">?</button>
