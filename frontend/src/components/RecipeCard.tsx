@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Recipe } from '../types'
+import type { Recipe, SortMode } from '../types'
 
 const TAG_CLASSES: Record<string, string> = {
   Healthy: 'tag-healthy',
@@ -48,7 +48,7 @@ function getScoreClass(score: number): string {
 interface RecipeCardProps {
   recipe: Recipe
   rank: number
-  sortMode: string
+  sortMode: SortMode
   isFavourited?: boolean
   onToggleFavourite?: (recipe: Recipe) => void
 }

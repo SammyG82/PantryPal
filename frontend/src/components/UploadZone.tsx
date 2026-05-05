@@ -1,39 +1,32 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react'
-import { toTitleCase } from '../utils'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { toTitleCase, API } from '../utils'
 import IngredientChip from './IngredientChip'
 import type { Upload } from '../types'
-
-const API = import.meta.env.VITE_API_URL ?? ''
 
 export interface UploadZoneHandle {
   removeByIngredient: (ingredient: string) => void
 }
 
 interface UploadZoneProps {
-  onDetectedChange: (ingredients: string[]) => void
   initialUploads?: Upload[]
   onUploadsChange?: (uploads: Upload[]) => void
 }
 
 const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
-  ({ onDetectedChange, initialUploads, onUploadsChange }, ref) => {
+  ({ initialUploads, onUploadsChange }, ref) => {
     const [dragOver, setDragOver] = useState(false)
     const [uploads, setUploads] = useState<Upload[]>(initialUploads ?? [])
     const inputRef = useRef<HTMLInputElement>(null)
 
-    // Sync uploads to parent whenever they change (skip detecting ones — they can't be resumed)
     const onUploadsChangeRef = useRef(onUploadsChange)
     useEffect(() => { onUploadsChangeRef.current = onUploadsChange })
     useEffect(() => {
       onUploadsChangeRef.current?.(uploads.filter(u => !u.detecting))
     }, [uploads])
 
-    const notify = useCallback((updated: Upload[]) => {
-      const ingredients = updated
-        .map((u) => u.ingredient)
-        .filter((ing): ing is string => ing !== null)
-      onDetectedChange(ingredients)
-    }, [onDetectedChange])
+    const uploadsRef = useRef(uploads)
+    useEffect(() => { uploadsRef.current = uploads }, [uploads])
+    useEffect(() => () => { uploadsRef.current.forEach(u => URL.revokeObjectURL(u.url)) }, [])
 
     const processFile = async (file: File) => {
       if (!file.type.startsWith('image/')) return
@@ -52,13 +45,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
           const data = await res.json() as { ingredients: string[] }
           const raw = data.ingredients?.[0] ?? null
           const ingredient = raw ? toTitleCase(raw) : null
-          setUploads((prev) => {
-            const updated = prev.map((u) =>
-              u.id === id ? { ...u, ingredient, detecting: false } : u
-            )
-            notify(updated)
-            return updated
-          })
+          setUploads((prev) => prev.map((u) => u.id === id ? { ...u, ingredient, detecting: false } : u))
         } else {
           setUploads((prev) => prev.map((u) => u.id === id ? { ...u, detecting: false } : u))
         }
@@ -72,9 +59,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       setUploads((prev) => {
         const removed = prev.find((u) => u.id === id)
         if (removed) URL.revokeObjectURL(removed.url)
-        const updated = prev.filter((u) => u.id !== id)
-        notify(updated)
-        return updated
+        return prev.filter((u) => u.id !== id)
       })
     }
 
@@ -83,11 +68,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
         prev
           .filter((u) => u.ingredient?.toLowerCase() === ingredient.toLowerCase())
           .forEach((u) => URL.revokeObjectURL(u.url))
-        const updated = prev.filter(
-          (u) => u.ingredient?.toLowerCase() !== ingredient.toLowerCase()
-        )
-        notify(updated)
-        return updated
+        return prev.filter((u) => u.ingredient?.toLowerCase() !== ingredient.toLowerCase())
       })
     }
 

@@ -1,5 +1,7 @@
+import type { SortMode } from '../types'
+
 interface SortOption {
-  key: string
+  key: SortMode
   label: string
 }
 
@@ -9,8 +11,8 @@ const SORT_OPTIONS: SortOption[] = [
 ]
 
 interface SortBarProps {
-  current: string
-  onChange: (key: string) => void
+  current: SortMode
+  onChange: (key: SortMode) => void
   count?: number
   searchQuery: string
   onSearchChange: (q: string) => void

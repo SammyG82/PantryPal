@@ -4,9 +4,10 @@ import NavBar from '../components/NavBar'
 import SortBar from '../components/SortBar'
 import RecipeCard from '../components/RecipeCard'
 import { useFavourites } from '../hooks/useFavourites'
-import type { Recipe } from '../types'
+import { API } from '../utils'
+import type { Recipe, SortMode } from '../types'
 
-const API = import.meta.env.VITE_API_URL ?? ''
+const RECIPES_PER_PAGE = 9
 
 function Results() {
   const location = useLocation()
@@ -17,13 +18,13 @@ function Results() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sortMode, setSortMode] = useState('match')
+  const [sortMode, setSortMode] = useState<SortMode>('match')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(9)
-  const handleSortChange = (mode: string) => { setSortMode(mode); setVisibleCount(9) }
+  const [visibleCount, setVisibleCount] = useState(RECIPES_PER_PAGE)
+  const handleSortChange = (mode: SortMode) => { setSortMode(mode); setVisibleCount(RECIPES_PER_PAGE) }
   const { toggleFavourite, isFavourited } = useFavourites()
 
   useEffect(() => {

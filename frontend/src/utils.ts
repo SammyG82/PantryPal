@@ -1,3 +1,5 @@
+export const API = import.meta.env.VITE_API_URL ?? ''
+
 export function toTitleCase(s: string): string {
   return s
     .trim()

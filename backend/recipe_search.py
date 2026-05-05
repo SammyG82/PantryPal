@@ -331,6 +331,22 @@ def _fuzzy_intersection(
 
 
 # -------------------------------------------------
+# SHARED HELPERS
+# -------------------------------------------------
+def _get_user_cores(user_ings: List[str]) -> Set[str]:
+    cores: Set[str] = set()
+    for u in user_ings:
+        core = _clean_ingredient_to_core(u)
+        if core:
+            cores.add(core)
+    return cores
+
+
+def _compute_match_score(pct_recipe: float, pct_user: float, jaccard: float) -> float:
+    return 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
+
+
+# -------------------------------------------------
 # MATCHING LOGIC
 # -------------------------------------------------
 def match_recipes(
@@ -341,11 +357,7 @@ def match_recipes(
     if not user_ings:
         return []
 
-    user_cores: Set[str] = set()
-    for u in user_ings:
-        core = _clean_ingredient_to_core(u)
-        if core:
-            user_cores.add(core)
+    user_cores = _get_user_cores(user_ings)
 
     if not user_cores:
         return []
@@ -389,7 +401,7 @@ def match_recipes(
         pct_user = matches / len(user_cores)
         union_size = len(user_cores | recipe_set)
         jaccard = matches / union_size if union_size > 0 else 0.0
-        match_score = 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
+        match_score = _compute_match_score(pct_recipe, pct_user, jaccard)
         health_score = _compute_health_score(row)
 
         candidates.append({
@@ -440,17 +452,30 @@ def _build_vocab(df: pd.DataFrame) -> set[str]:
     return _ingredient_vocab  # type: ignore[return-value]
 
 
+_correction_cache: dict[str, tuple[str, bool]] = {}
+
+
 def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> tuple[str, bool]:
+    cache_key = user_input.lower().strip()
+    if cache_key in _correction_cache:
+        return _correction_cache[cache_key]
+
     core = _clean_ingredient_to_core(user_input)
     if not core:
-        return user_input.strip().title(), False
+        result = user_input.strip().title(), False
+        _correction_cache[cache_key] = result
+        return result
 
     vocab = _build_vocab(df)
     if not vocab:
-        return user_input.strip().title(), False
+        result = user_input.strip().title(), False
+        _correction_cache[cache_key] = result
+        return result
 
     if core in vocab:
-        return core.title(), True
+        result = core.title(), True
+        _correction_cache[cache_key] = result
+        return result
 
     best_match = None
     best_score = 0.0
@@ -460,10 +485,9 @@ def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.8
             best_score = score
             best_match = candidate
 
-    if best_match and best_score >= threshold:
-        return best_match.title(), True
-
-    return user_input.strip().title(), False
+    result = (best_match.title(), True) if (best_match and best_score >= threshold) else (user_input.strip().title(), False)
+    _correction_cache[cache_key] = result
+    return result
 
 
 def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 20) -> List[Dict]:
@@ -473,12 +497,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     mask = df["display_name"].str.lower().str.contains(q, na=False)
     matches = df[mask].head(limit)
 
-    user_cores: Set[str] = set()
-    if user_ings:
-        for u in user_ings:
-            core = _clean_ingredient_to_core(u)
-            if core:
-                user_cores.add(core)
+    user_cores = _get_user_cores(user_ings) if user_ings else set()
 
     results = []
     for idx, row in matches.iterrows():
@@ -493,7 +512,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             pct_recipe = match_count / recipe_size
             union_size = len(user_cores | recipe_set)
             jaccard = match_count / union_size if union_size > 0 else 0.0
-            score = 0.6 * pct_recipe + 0.25 * (match_count / len(user_cores)) + 0.15 * jaccard
+            score = _compute_match_score(pct_recipe, match_count / len(user_cores), jaccard)
         else:
             match_count = 0
             score = 0.0

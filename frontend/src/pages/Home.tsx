@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
@@ -41,16 +41,18 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
     } catch { /* ignore */ }
   }, [])
 
-  const detectedIngredients = uploads
-    .filter((u) => u.ingredient !== null && !u.detecting)
-    .map((u) => u.ingredient as string)
+  const detectedIngredients = useMemo(
+    () => uploads.filter((u) => u.ingredient !== null && !u.detecting).map((u) => u.ingredient as string),
+    [uploads]
+  )
 
-  const allIngredients = [
-    ...typedIngredients,
-    ...detectedIngredients.filter(
-      (d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase())
-    ),
-  ]
+  const allIngredients = useMemo(
+    () => [
+      ...typedIngredients,
+      ...detectedIngredients.filter((d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase())),
+    ],
+    [typedIngredients, detectedIngredients]
+  )
 
   const addIngredient = (value: string, supported: boolean) => {
     const trimmed = value.trim()
@@ -61,11 +63,9 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
   }
 
   const removeIngredient = (index: number) => {
-    setTypedIngredients((prev) => {
-      const removed = prev[index]
-      setUnsupported((u) => { const next = new Set(u); next.delete(removed); return next })
-      return prev.filter((_, i) => i !== index)
-    })
+    const removed = typedIngredients[index]
+    setTypedIngredients((prev) => prev.filter((_, i) => i !== index))
+    setUnsupported((u) => { const next = new Set(u); next.delete(removed); return next })
   }
 
   const handleCook = () => {
@@ -86,9 +86,10 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
     navigate('/results', { state: { ingredients: allIngredients } })
   }
 
-  const recentAvailable = recent?.ingredients.filter(
-    (r) => !allIngredients.some((i) => i.toLowerCase() === r.toLowerCase())
-  ) ?? []
+  const recentAvailable = useMemo(
+    () => recent?.ingredients.filter((r) => !allIngredients.some((i) => i.toLowerCase() === r.toLowerCase())) ?? [],
+    [recent, allIngredients]
+  )
 
   return (
     <div>
@@ -115,7 +116,6 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
               </p>
               <UploadZone
                 ref={uploadZoneRef}
-                onDetectedChange={() => {}}
                 initialUploads={uploads}
                 onUploadsChange={(updated) => setUploads(updated)}
               />

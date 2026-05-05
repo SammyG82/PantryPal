@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import { toTitleCase } from '../utils'
-
-const API = import.meta.env.VITE_API_URL ?? ''
+import { toTitleCase, API } from '../utils'
 
 interface IngredientInputProps {
   onAdd: (value: string, supported: boolean) => void

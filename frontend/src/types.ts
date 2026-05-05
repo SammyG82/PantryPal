@@ -1,3 +1,5 @@
+export type SortMode = 'match' | 'health'
+
 export interface Upload {
   id: string
   url: string
