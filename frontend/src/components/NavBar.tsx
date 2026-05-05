@@ -9,6 +9,7 @@ function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const isResults = location.pathname === '/results'
+  const isFavorites = location.pathname === '/favorites'
 
   return (
     <nav>
@@ -24,11 +25,23 @@ function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
             <button className="back-btn" onClick={() => navigate('/', { state: { lastIngredients: ingredients } })}>
               ← Back
             </button>
+            <button className="back-btn" onClick={() => navigate('/favorites')}>
+              Favorites
+            </button>
           </>
-        ) : (
-          <button className="back-btn" onClick={() => navigate('/results', lastIngredients?.length ? { state: { ingredients: lastIngredients } } : undefined)}>
-            Results
+        ) : isFavorites ? (
+          <button className="back-btn" onClick={() => navigate(-1)}>
+            ← Back
           </button>
+        ) : (
+          <>
+            <button className="back-btn" onClick={() => navigate('/results', lastIngredients?.length ? { state: { ingredients: lastIngredients } } : undefined)}>
+              Results
+            </button>
+            <button className="back-btn" onClick={() => navigate('/favorites')}>
+              Favorites
+            </button>
+          </>
         )}
       </div>
     </nav>

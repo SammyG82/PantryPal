@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import SortBar from '../components/SortBar'
 import RecipeCard from '../components/RecipeCard'
+import { useFavourites } from '../hooks/useFavourites'
 import type { Recipe } from '../types'
 
 const API = import.meta.env.VITE_API_URL ?? ''
@@ -17,12 +18,13 @@ function Results() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState('match')
-  const handleSortChange = (mode: string) => { setSortMode(mode); setVisibleCount(9) }
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [visibleCount, setVisibleCount] = useState(9)
+  const handleSortChange = (mode: string) => { setSortMode(mode); setVisibleCount(9) }
+  const { toggleFavourite, isFavourited } = useFavourites()
 
   useEffect(() => {
     if (!ingredients) return
@@ -167,15 +169,12 @@ function Results() {
         <>
           <div className="recipe-grid">
             {visible.map((recipe, i) => (
-              <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} />
+              <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} isFavourited={isFavourited(recipe.id)} onToggleFavourite={toggleFavourite} />
             ))}
           </div>
           {hasMore && (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem 0 3rem' }}>
-              <button
-                style={{ padding: '12px 36px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.95rem', fontWeight: 500 }}
-                onClick={() => setVisibleCount(c => c + 9)}
-              >
+              <button className="btn-terra" style={{ padding: '12px 36px', fontSize: '0.95rem' }} onClick={() => setVisibleCount(c => c + 9)}>
                 Load more
               </button>
             </div>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Recipe } from '../types'
 
 const TAG_CLASSES: Record<string, string> = {
@@ -48,9 +49,20 @@ interface RecipeCardProps {
   recipe: Recipe
   rank: number
   sortMode: string
+  isFavourited?: boolean
+  onToggleFavourite?: (recipe: Recipe) => void
 }
 
-function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
+function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }: RecipeCardProps) {
+  const [popping, setPopping] = useState(false)
+
+  const handleHeartClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!onToggleFavourite) return
+    setPopping(true)
+    onToggleFavourite(recipe)
+  }
+
   const {
     name,
     match_score,
@@ -76,6 +88,18 @@ function RecipeCard({ recipe, rank, sortMode }: RecipeCardProps) {
         <span className={`score-badge ${getScoreClass(primaryScore)}`}>
           {primaryScore}%
         </span>
+        {onToggleFavourite && (
+          <button
+            className={`heart-btn${isFavourited ? ' hearted' : ''}${popping ? ' popping' : ''}`}
+            onClick={handleHeartClick}
+            onAnimationEnd={() => setPopping(false)}
+            aria-label={isFavourited ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="recipe-body">

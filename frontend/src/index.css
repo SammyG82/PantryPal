@@ -117,6 +117,15 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .error-state{text-align:center;padding:4rem 2rem;color:var(--terra);font-size:0.95rem}
 .empty-state{text-align:center;padding:4rem 2rem;color:var(--muted)}
 .empty-state h3{font-family:'Playfair Display',serif;font-size:1.5rem;color:var(--ink);margin-bottom:0.5rem}
+.empty-state--full{min-height:calc(100vh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.btn-terra{cursor:pointer;font-family:'DM Sans',sans-serif;background:var(--terra);color:white;border:none;border-radius:50px;font-weight:500;transition:background .2s}
+.btn-terra:hover{background:var(--ink)}
+.heart-btn{position:absolute;bottom:10px;right:10px;background:rgba(255,255,255,0.88);border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s,transform .2s}
+.heart-btn:hover{background:white;transform:scale(1.2)}
+.heart-btn svg{stroke:var(--muted);fill:none;transition:stroke .15s,fill .15s}
+.heart-btn.hearted svg{stroke:var(--terra);fill:var(--terra)}
+@keyframes heart-pop{0%{transform:scale(1)}45%{transform:scale(1.45)}100%{transform:scale(1)}}
+.heart-btn.popping{animation:heart-pop .35s cubic-bezier(.36,.07,.19,.97)}
 
 .info-btn{position:fixed;bottom:1.5rem;right:1.5rem;width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--cream);border:none;font-size:1.05rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(42,36,22,0.2);z-index:200;transition:background .2s,transform .2s;font-family:'DM Sans',sans-serif}
 .info-btn:hover{background:var(--terra);transform:scale(1.08)}

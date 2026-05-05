@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Results from './pages/Results'
+import Favourites from './pages/Favourites'
 import type { Upload } from './types'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           />
         } />
         <Route path="/results" element={<Results />} />
+        <Route path="/favorites" element={<Favourites />} />
       </Routes>
     </BrowserRouter>
   )
