@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from contextlib import asynccontextmanager
 from typing import List
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -12,7 +13,14 @@ from PIL import Image
 # -------------------------------------------------
 # App setup
 # -------------------------------------------------
-app = FastAPI(title="PantryPal API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    get_df()
+    get_predictor()
+    yield
+
+
+app = FastAPI(title="PantryPal API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,15 +46,15 @@ def get_df():
     return _df
 
 
-@app.on_event("startup")
-def preload():
-    get_df()
+_predictor = None
 
 
 def get_predictor():
-    """Return predict_image function, loading model on first call."""
-    from utils.image_predict import predict_image
-    return predict_image
+    global _predictor
+    if _predictor is None:
+        from utils.image_predict import predict_image
+        _predictor = predict_image
+    return _predictor
 
 
 # -------------------------------------------------
@@ -79,18 +87,17 @@ class DetectResponse(BaseModel):
 # -------------------------------------------------
 # Response helpers
 # -------------------------------------------------
-def _parse_cook_time(raw: str) -> str:
-    value = (raw or "").strip()
-    return value if value and value != "N/A" else "N/A"
+_TAG_HEALTHY = ["Healthy"]
+_TAG_BALANCED = ["Balanced"]
+_TAG_INDULGENT = ["Indulgent"]
 
 
 def _tags_from_health(health_score_pct: int) -> List[str]:
     if health_score_pct >= 75:
-        return ["Healthy"]
+        return _TAG_HEALTHY
     elif health_score_pct >= 50:
-        return ["Balanced"]
-    else:
-        return ["Indulgent"]
+        return _TAG_BALANCED
+    return _TAG_INDULGENT
 
 
 def _to_recipe_response(r: dict) -> RecipeResponse:
@@ -104,7 +111,7 @@ def _to_recipe_response(r: dict) -> RecipeResponse:
         protein=round(r.get("protein_g", 0.0) or 0.0, 1),
         fat=round(r.get("fat_g", 0.0) or 0.0, 1),
         carbs=round(r.get("carbs_g", 0.0) or 0.0, 1),
-        cook_time=_parse_cook_time(r.get("cook_time", "") or ""),
+        cook_time=r.get("cook_time", "") or "",
         matched_count=r["matches"],
         total_ingredients=r["recipe_size"],
         tags=_tags_from_health(health_pct),
@@ -181,11 +188,10 @@ def search_recipes(body: SearchRequest):
 
 @app.post("/api/recipes", response_model=List[RecipeResponse])
 def get_recipes(body: RecipesRequest):
-    """
-    Accept a list of ingredients, return ranked recipe matches.
-    """
     if not body.ingredients:
         raise HTTPException(status_code=400, detail="No ingredients provided")
+    if len(body.ingredients) > 50:
+        raise HTTPException(status_code=400, detail="Too many ingredients (max 50)")
 
     from recipe_search import match_recipes
 

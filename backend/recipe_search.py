@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Set
 import re
 import pandas as pd
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 
 # -------------------------------------------------
@@ -127,11 +127,17 @@ def _normalize_list(xs: List[str]) -> List[str]:
     return normed
 
 
+_CALORIES_RE = re.compile(r"Calories\s+(\d+)", re.IGNORECASE)
+_NUTRITION_RE: dict[str, re.Pattern] = {
+    label: re.compile(rf"{re.escape(label)}\s+(\d+(\.\d*)?)g")
+    for label in ("Protein", "Total Fat", "Total Sugars", "Total Carbohydrate")
+}
+
+
 def _extract_grams(text: str, label: str) -> float:
     if not isinstance(text, str):
         return 0.0
-    pattern = rf"{re.escape(label)}\s+(\d+(\.\d*)?)g"
-    m = re.search(pattern, text)
+    m = _NUTRITION_RE[label].search(text)
     if not m:
         return 0.0
     try:
@@ -141,16 +147,28 @@ def _extract_grams(text: str, label: str) -> float:
 
 
 def _extract_calories(text: str) -> int:
-    """Extract calories from nutrition string. Looks for 'Calories NNN' pattern."""
     if not isinstance(text, str):
         return 0
-    m = re.search(r"Calories\s+(\d+)", text, re.IGNORECASE)
+    m = _CALORIES_RE.search(text)
     if m:
         try:
             return int(m.group(1))
         except ValueError:
             return 0
     return 0
+
+
+def _parse_nutrition_row(text: str) -> dict:
+    """Parse all nutrition fields from a single nutrition string in one pass."""
+    if not isinstance(text, str):
+        return {"calories": 0, "protein_g": 0.0, "fat_g": 0.0, "sugar_g": 0.0, "carbs_g": 0.0}
+    return {
+        "calories": _extract_calories(text),
+        "protein_g": _extract_grams(text, "Protein"),
+        "fat_g": _extract_grams(text, "Total Fat"),
+        "sugar_g": _extract_grams(text, "Total Sugars"),
+        "carbs_g": _extract_grams(text, "Total Carbohydrate"),
+    }
 
 
 # -------------------------------------------------
@@ -258,11 +276,12 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
 
     # Nutrition parsing
     if "nutrition" in df.columns:
-        out["calories"] = df["nutrition"].apply(_extract_calories)
-        out["protein_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Protein"))
-        out["fat_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Fat"))
-        out["sugar_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Sugars"))
-        out["carbs_g"] = df["nutrition"].apply(lambda s: _extract_grams(s, "Total Carbohydrate"))
+        nutrition_parsed = pd.DataFrame(df["nutrition"].apply(_parse_nutrition_row).tolist())
+        out["calories"] = nutrition_parsed["calories"].values
+        out["protein_g"] = nutrition_parsed["protein_g"].values
+        out["fat_g"] = nutrition_parsed["fat_g"].values
+        out["sugar_g"] = nutrition_parsed["sugar_g"].values
+        out["carbs_g"] = nutrition_parsed["carbs_g"].values
     else:
         for col in ["calories", "protein_g", "fat_g", "sugar_g", "carbs_g"]:
             out[col] = 0.0
@@ -272,31 +291,28 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     else:
         out["cook_time"] = ""
 
+    out["health_score"] = _compute_health_scores_vectorized(out)
+
     return out
 
 
 # -------------------------------------------------
 # HEALTH SCORE LOGIC
 # -------------------------------------------------
+def _compute_health_scores_vectorized(df: pd.DataFrame) -> pd.Series:
+    """Pre-compute health scores for all rows at once using vectorized operations."""
+    protein = df["protein_g"].astype(float).fillna(0.0)
+    sugar = df["sugar_g"].astype(float).fillna(0.0)
+    calories = df["calories"].astype(float).fillna(0.0)
+    return (
+        0.45 * (protein / 25.0).clip(0.0, 1.0) +
+        0.25 * (1.0 - (sugar / 30.0).clip(0.0, 1.0)) +
+        0.30 * (1.0 - (calories / 800.0).clip(0.0, 1.0))
+    ).clip(0.0, 1.0)
+
+
 def _compute_health_score(row: pd.Series) -> float:
-    protein = float(row.get("protein_g", 0.0) or 0.0)
-    sugar = float(row.get("sugar_g", 0.0) or 0.0)
-    calories = float(row.get("calories", 0) or 0)
-
-    PROTEIN_TARGET = 25.0
-    SUGAR_LIMIT = 30.0
-    CALORIE_LIMIT = 800.0
-
-    protein_score = min(protein / PROTEIN_TARGET, 1.0)
-    sugar_score = 1.0 - min(sugar / SUGAR_LIMIT, 1.0)
-    calorie_score = 1.0 - min(calories / CALORIE_LIMIT, 1.0)
-
-    health = (
-        0.45 * protein_score +
-        0.25 * sugar_score +
-        0.30 * calorie_score
-    )
-    return float(max(0.0, min(1.0, health)))
+    return float(row.get("health_score", 0.0) or 0.0)
 
 
 def _fuzzy_intersection(
@@ -307,25 +323,24 @@ def _fuzzy_intersection(
     if not user_cores or not recipe_cores:
         return set()
 
-    recipe_set: Set[str] = set(recipe_cores)
-    exact = user_cores & recipe_set
+    exact = user_cores & recipe_cores
     matches: Set[str] = set(exact)
-    used_recipe: Set[str] = set(exact)
-
     remaining_user = user_cores - exact
-    remaining_recipe = recipe_set - used_recipe
+    remaining_recipe = list(recipe_cores - exact)
 
     for u in remaining_user:
-        best_r = None
-        best_score = 0.0
-        for r in list(remaining_recipe):
-            score = fuzz.token_set_ratio(u, r) / 100.0
-            if score > best_score:
-                best_score = score
-                best_r = r
-        if best_r is not None and best_score >= threshold:
-            matches.add(best_r)
-            remaining_recipe.remove(best_r)
+        if not remaining_recipe:
+            break
+        result = process.extractOne(
+            u,
+            remaining_recipe,
+            scorer=fuzz.token_set_ratio,
+            score_cutoff=threshold * 100,
+        )
+        if result is not None:
+            key, _score, idx = result
+            matches.add(key)
+            remaining_recipe.pop(idx)
 
     return matches
 
@@ -362,21 +377,27 @@ def match_recipes(
     if not user_cores:
         return []
 
-    # Use inverted index to find candidate recipes without scanning all rows
     inv = _build_inverted_index(df)
+    vocab_list = _ingredient_vocab_list
     candidate_indices: set[int] = set()
     for user_core in user_cores:
-        for key, row_indices in inv.items():
-            if user_core == key or fuzz.ratio(user_core, key) / 100.0 >= 0.82:
-                candidate_indices.update(row_indices)
+        matches = process.extract(
+            user_core,
+            vocab_list,
+            scorer=fuzz.ratio,
+            score_cutoff=82,
+            limit=None,
+        )
+        for key, _score, _i in matches:
+            candidate_indices.update(inv[key])
 
     if not candidate_indices:
         return []
 
     candidates: List[Dict] = []
+    candidates_batch = df.iloc[sorted(candidate_indices)]
 
-    for idx in candidate_indices:
-        row = df.iloc[idx]
+    for global_idx, row in candidates_batch.iterrows():
         recipe_cores = row["ingredients_norm"]
         if not recipe_cores:
             continue
@@ -405,7 +426,7 @@ def match_recipes(
         health_score = _compute_health_score(row)
 
         candidates.append({
-            "id":           int(idx),
+            "id":           int(global_idx),
             "name":         row["display_name"],
             "matches":      matches,
             "pct_recipe":   pct_recipe,
@@ -431,11 +452,12 @@ def match_recipes(
 
 
 _ingredient_vocab: set[str] | None = None
+_ingredient_vocab_list: list[str] | None = None
 _inverted_index: dict[str, list[int]] | None = None
 
 
 def _build_inverted_index(df: pd.DataFrame) -> dict[str, list[int]]:
-    global _inverted_index, _ingredient_vocab
+    global _inverted_index, _ingredient_vocab, _ingredient_vocab_list
     if _inverted_index is None:
         idx: dict[str, list[int]] = {}
         for i, cores in enumerate(df["ingredients_norm"]):
@@ -444,6 +466,8 @@ def _build_inverted_index(df: pd.DataFrame) -> dict[str, list[int]]:
         _inverted_index = idx
         if _ingredient_vocab is None:
             _ingredient_vocab = set(idx.keys())
+        if _ingredient_vocab_list is None:
+            _ingredient_vocab_list = list(idx.keys())
     return _inverted_index
 
 
