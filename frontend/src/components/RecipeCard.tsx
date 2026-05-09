@@ -1,5 +1,6 @@
 import React, { useState, memo } from 'react'
 import type { Recipe, SortMode } from '../types'
+import ScaleModal from './ScaleModal'
 
 const TAG_CLASSES: Record<string, string> = {
   Healthy: 'tag-healthy',
@@ -55,6 +56,7 @@ interface RecipeCardProps {
 
 function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }: RecipeCardProps) {
   const [popping, setPopping] = useState(false)
+  const [scaleOpen, setScaleOpen] = useState(false)
 
   const handleHeartClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -157,9 +159,17 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
           </div>
         </div>
 
-        {url && (
-          <a className="view-btn" href={url} target="_blank" rel="noopener noreferrer">View full recipe →</a>
-        )}
+        <div className="recipe-body-actions">
+          {(recipe.ingredients ?? []).length > 0 && (
+            <button className="view-btn scale-btn" onClick={() => setScaleOpen(true)}>
+              Scale nutrition by servings
+            </button>
+          )}
+          {url && (
+            <a className="view-btn" href={url} target="_blank" rel="noopener noreferrer">View full recipe →</a>
+          )}
+        </div>
+        {scaleOpen && <ScaleModal recipe={recipe} onClose={() => setScaleOpen(false)} />}
       </div>
     </div>
   )

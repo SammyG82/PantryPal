@@ -97,6 +97,7 @@ class RecipeResponse(BaseModel):
     total_ingredients: int
     tags: List[str]
     url: str
+    ingredients: List[str] = []
 
 
 class DetectResponse(BaseModel):
@@ -135,6 +136,7 @@ def _to_recipe_response(r: dict) -> RecipeResponse:
         total_ingredients=r["recipe_size"],
         tags=_tags_from_health(health_pct),
         url=r.get("url", "") or "",
+        ingredients=r.get("ingredients_raw", []) or [],
     )
 
 

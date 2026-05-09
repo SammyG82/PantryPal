@@ -21,4 +21,5 @@ export interface Recipe {
   total_ingredients: number
   tags: string[]
   url: string
+  ingredients: string[]
 }

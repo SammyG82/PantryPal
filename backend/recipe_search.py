@@ -267,6 +267,19 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
                 core_ingredients.append(core)
         return _normalize_list(core_ingredients)
 
+    def parse_ings_raw(x):
+        if not isinstance(x, str):
+            return []
+        x = x.strip()
+        if x.startswith("[") and x.endswith("]"):
+            try:
+                val = literal_eval(x)
+                if isinstance(val, list):
+                    return [str(item).strip() for item in val if str(item).strip()]
+            except Exception:
+                pass
+        return [part.strip() for part in x.split(",") if part.strip()]
+
     if "ingredients" not in df.columns:
         raise ValueError("CSV has no 'ingredients' column")
 
@@ -284,6 +297,7 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
         df["display_name"] = df.index.astype(str)
 
     out = df[["display_name", "ingredients_norm"]].copy()
+    out["ingredients_raw"] = df["ingredients"].apply(parse_ings_raw)
 
     if "url" in df.columns:
         out["url"] = df["url"].fillna("").astype(str)
@@ -436,6 +450,7 @@ def match_recipes(
     calories_arr = df["calories"].values
     cooktime_arr = df["cook_time"].values
     url_arr      = df["url"].values
+    ing_raw_arr  = df["ingredients_raw"].values
 
     candidates: List[Dict] = []
 
@@ -480,9 +495,10 @@ def match_recipes(
             "fat_g":        float(fat_arr[idx]),
             "sugar_g":      float(sugar_arr[idx]),
             "carbs_g":      float(carbs_arr[idx]),
-            "calories":     int(calories_arr[idx]),
-            "cook_time":    str(cooktime_arr[idx]),
-            "url":          str(url_arr[idx]),
+            "calories":        int(calories_arr[idx]),
+            "cook_time":       str(cooktime_arr[idx]),
+            "url":             str(url_arr[idx]),
+            "ingredients_raw": list(ing_raw_arr[idx]),
         })
 
     if not candidates:
@@ -564,6 +580,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     calories_arr = df["calories"].values
     cooktime_arr = df["cook_time"].values
     url_arr      = df["url"].values
+    ing_raw_arr  = df["ingredients_raw"].values
 
     results = []
     for idx in match_indices:
@@ -591,9 +608,10 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             "fat_g":        float(fat_arr[idx]),
             "sugar_g":      float(sugar_arr[idx]),
             "carbs_g":      float(carbs_arr[idx]),
-            "calories":     int(calories_arr[idx]),
-            "cook_time":    str(cooktime_arr[idx]),
-            "url":          str(url_arr[idx]),
+            "calories":        int(calories_arr[idx]),
+            "cook_time":       str(cooktime_arr[idx]),
+            "url":             str(url_arr[idx]),
+            "ingredients_raw": list(ing_raw_arr[idx]),
         })
 
     results.sort(key=lambda r: -r["score"])
