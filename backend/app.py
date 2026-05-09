@@ -100,6 +100,10 @@ class RecipeResponse(BaseModel):
     ingredients: List[str] = []
 
 
+class RecipeIngredientsResponse(BaseModel):
+    ingredients: List[str]
+
+
 class DetectResponse(BaseModel):
     ingredients: List[str]
 
@@ -192,6 +196,21 @@ class CorrectResponse(BaseModel):
 class SearchRequest(BaseModel):
     q: str = Field(..., max_length=200)
     ingredients: List[_Ingredient] = []
+
+
+@app.get("/api/recipe/{recipe_id}", response_model=RecipeIngredientsResponse)
+def get_recipe_by_id(recipe_id: int):
+    if recipe_id < 0:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    df = get_df()
+    try:
+        row = df.loc[recipe_id]
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    ings = row.get("ingredients_raw")
+    return RecipeIngredientsResponse(
+        ingredients=list(ings) if isinstance(ings, list) else []
+    )
 
 
 @app.post("/api/correct", response_model=CorrectResponse)
