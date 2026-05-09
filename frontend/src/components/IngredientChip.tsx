@@ -11,9 +11,9 @@ function IngredientChip({ label, onRemove, unsupported }: IngredientChipProps) {
     >
       {label}
       {unsupported && (
-        <span className="chip-warn-icon">
+        <span className="chip-warn-icon" aria-label="Ingredient not recognised">
           ⚠
-          <span className="chip-tooltip">Ingredient not recognised</span>
+          <span className="chip-tooltip" aria-hidden="true">Ingredient not recognised</span>
         </span>
       )}
       {onRemove && (

@@ -27,6 +27,7 @@ function SortBar({ current, onChange, count, searchQuery, onSearchChange }: Sort
           <button
             key={opt.key}
             className={`sort-tab${current === opt.key ? ' active' : ''}`}
+            aria-pressed={current === opt.key}
             onClick={() => onChange(opt.key)}
           >
             {opt.label}

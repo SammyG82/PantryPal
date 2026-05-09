@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import SortBar from '../components/SortBar'
@@ -24,9 +24,17 @@ function Results() {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [showInfo, setShowInfo] = useState(false)
+  const infoButtonRef = useRef<HTMLButtonElement>(null)
   const [visibleCount, setVisibleCount] = useState(RECIPES_PER_PAGE)
   const handleSortChange = (mode: SortMode) => { setSortMode(mode); setVisibleCount(RECIPES_PER_PAGE) }
   const { toggleFavourite, isFavourited } = useFavourites()
+
+  useEffect(() => {
+    if (!showInfo) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowInfo(false); infoButtonRef.current?.focus() } }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [showInfo])
 
   useEffect(() => {
     if (!ingredients) return
@@ -201,14 +209,14 @@ function Results() {
         </>
       )}
 
-      <button className="info-btn" onClick={() => setShowInfo(true)} aria-label="How scores are calculated">?</button>
+      <button ref={infoButtonRef} className="info-btn" onClick={() => setShowInfo(true)} aria-label="How scores are calculated">?</button>
 
       {showInfo && (
-        <div className="info-overlay" onClick={() => setShowInfo(false)}>
-          <div className="info-modal" onClick={e => e.stopPropagation()}>
+        <div className="info-overlay" onClick={() => { setShowInfo(false); infoButtonRef.current?.focus() }}>
+          <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onClick={e => e.stopPropagation()}>
             <div className="info-modal-header">
-              <span className="info-modal-title">How we rank recipes</span>
-              <button className="info-close" onClick={() => setShowInfo(false)}>×</button>
+              <span id="info-modal-title" className="info-modal-title">How we rank recipes</span>
+              <button className="info-close" onClick={() => { setShowInfo(false); infoButtonRef.current?.focus() }} aria-label="Close">×</button>
             </div>
 
             <div className="info-section">

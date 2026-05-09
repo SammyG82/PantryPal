@@ -16,6 +16,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
   ({ initialUploads, onUploadsChange }, ref) => {
     const [dragOver, setDragOver] = useState(false)
     const [uploads, setUploads] = useState<Upload[]>(initialUploads ?? [])
+    const [dragError, setDragError] = useState<string | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
     const onUploadsChangeRef = useRef(onUploadsChange)
@@ -110,7 +111,8 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
           const file = new File([blob], 'dragged-image.jpg', { type: blob.type })
           processFile(file)
         } catch {
-          alert('Could not load that image due to browser restrictions. Save it to your device and upload it instead.')
+          setDragError('Could not load that image. Save it to your device and upload it instead.')
+          setTimeout(() => setDragError(null), 4000)
         }
       }
     }
@@ -155,13 +157,14 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
             {uploads.map((u) => (
               <div className="thumb" key={u.id}>
                 <img src={u.url} alt={u.ingredient ? `Uploaded: ${u.ingredient}` : u.detecting ? 'Uploaded image (detecting…)' : 'Uploaded image'} />
-                <button className="thumb-x" onClick={(e) => { e.stopPropagation(); removeById(u.id) }}>×</button>
+                <button className="thumb-x" onClick={(e) => { e.stopPropagation(); removeById(u.id) }} aria-label={u.ingredient ? `Remove ${u.ingredient} photo` : 'Remove photo'}>×</button>
               </div>
             ))}
           </div>
         )}
 
         {anyDetecting && <p className="detecting-msg">Detecting ingredients...</p>}
+        {dragError && <p className="detecting-msg" style={{ color: 'var(--terra)' }}>{dragError}</p>}
 
         {detectedUploads.length > 0 && (
           <div>

@@ -4,6 +4,7 @@ from ast import literal_eval
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Set
+import heapq
 import logging
 import re
 import pandas as pd
@@ -307,6 +308,7 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
         out["cook_time"] = ""
 
     out["health_score"] = _compute_health_scores_vectorized(out)
+    out["display_name_lower"] = out["display_name"].str.lower()
 
     return out
 
@@ -379,21 +381,28 @@ def _compute_match_score(pct_recipe: float, pct_user: float, jaccard: float) -> 
 # -------------------------------------------------
 # MATCHING LOGIC
 # -------------------------------------------------
+@lru_cache(maxsize=2048)
+def _candidates_for_core(user_core: str) -> frozenset[int]:
+    vocab_matches = process.extract(
+        user_core,
+        _ingredient_vocab_list,
+        scorer=fuzz.ratio,
+        score_cutoff=82,
+        limit=None,
+    )
+    candidates: set[int] = set()
+    for key, _score, _i in vocab_matches:
+        candidates.update(_inverted_index[key])
+    return frozenset(candidates)
+
+
 def _get_ingredient_candidates(user_cores: set[str]) -> set[int]:
     """Row indices whose ingredients fuzzy-match any of user_cores."""
     if not user_cores or not _inverted_index or not _ingredient_vocab_list:
         return set()
     candidates: set[int] = set()
     for user_core in user_cores:
-        vocab_matches = process.extract(
-            user_core,
-            _ingredient_vocab_list,
-            scorer=fuzz.ratio,
-            score_cutoff=82,
-            limit=None,
-        )
-        for key, _score, _i in vocab_matches:
-            candidates.update(_inverted_index[key])
+        candidates |= _candidates_for_core(user_core)
     return candidates
 
 
@@ -479,8 +488,7 @@ def match_recipes(
     if not candidates:
         return []
 
-    candidates.sort(key=lambda c: (-c["score"], c["recipe_size"]))
-    return candidates[:quota]
+    return heapq.nlargest(quota, candidates, key=lambda c: (c["score"], -c["recipe_size"]))
 
 
 _ingredient_vocab: set[str] | None = None
@@ -510,8 +518,6 @@ def _build_vocab(df: pd.DataFrame) -> set[str]:
 
 @lru_cache(maxsize=4096)
 def _correct_cached(core: str, threshold: float) -> tuple[str, bool] | None:
-    if not _ingredient_vocab or not _ingredient_vocab_list:
-        return None
     if core in _ingredient_vocab:
         return (core.title(), True)
     match = process.extractOne(core, _ingredient_vocab_list, scorer=fuzz.ratio, score_cutoff=threshold * 100)
@@ -533,7 +539,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     if not query.strip():
         return []
     q = query.strip().lower()
-    mask = df["display_name"].str.lower().str.contains(q, na=False, regex=False)
+    mask = df["display_name_lower"].str.contains(q, na=False, regex=False)
     name_indices = set(df.index[mask])
 
     if not name_indices:

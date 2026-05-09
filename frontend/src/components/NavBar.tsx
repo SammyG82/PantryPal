@@ -13,15 +13,9 @@ function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
 
   return (
     <nav>
-      <span
-        className="logo"
-        onClick={() => navigate('/')}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/') }}
-        role="button"
-        tabIndex={0}
-      >
+      <button className="logo" onClick={() => navigate('/')}>
         Pantry<em>Pal</em>
-      </span>
+      </button>
       <div className="nav-right">
         {isResults ? (
           <>
@@ -41,7 +35,7 @@ function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
           </button>
         ) : (
           <>
-            <button className="back-btn" disabled={!lastIngredients?.length} onClick={() => navigate('/results', { state: { ingredients: lastIngredients } })}>
+            <button className="back-btn" disabled={!lastIngredients?.length && !ingredients.length} onClick={() => navigate('/results', { state: { ingredients: lastIngredients ?? ingredients } })}>
               Results
             </button>
             <button className="back-btn" onClick={() => navigate('/favorites')}>
