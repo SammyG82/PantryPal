@@ -22,6 +22,7 @@ function Results() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [showInfo, setShowInfo] = useState(false)
   const [visibleCount, setVisibleCount] = useState(RECIPES_PER_PAGE)
   const handleSortChange = (mode: SortMode) => { setSortMode(mode); setVisibleCount(RECIPES_PER_PAGE) }
@@ -29,6 +30,8 @@ function Results() {
 
   useEffect(() => {
     if (!ingredients) return
+
+    const controller = new AbortController()
 
     const fetchRecipes = async () => {
       setLoading(true)
@@ -38,59 +41,73 @@ function Results() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ingredients }),
+          signal: controller.signal,
         })
-        if (!res.ok) throw new Error(`Server error: ${res.status}`)
+        if (!res.ok) {
+          const body = await res.json().catch(() => null) as { detail?: string } | null
+          throw new Error(body?.detail ?? `Server error: ${res.status}`)
+        }
         const data = await res.json() as Recipe[]
         setRecipes(data)
       } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 
     fetchRecipes()
+    return () => controller.abort()
   }, [ingredients])
 
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults(null)
+      setSearchError(null)
       setSearching(false)
+      setVisibleCount(RECIPES_PER_PAGE)
       return
     }
-    let cancelled = false
+    const controller = new AbortController()
+    setSearchError(null)
     const timer = setTimeout(async () => {
-      setSearching(true)
       try {
         const res = await fetch(`${API}/api/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [] }),
+          signal: controller.signal,
         })
-        if (cancelled) return
         if (res.ok) {
           setSearchResults(await res.json() as Recipe[])
         } else {
+          const body = await res.json().catch(() => null) as { detail?: string } | null
+          setSearchError(body?.detail ?? 'Search failed')
           setSearchResults(null)
         }
-      } catch {
-        if (!cancelled) setSearchResults(null)
+      } catch (err) {
+        if ((err as { name?: string }).name !== 'AbortError') {
+          setSearchResults(null)
+          setSearchError('Search failed')
+        }
       } finally {
-        if (!cancelled) setSearching(false)
+        if (!controller.signal.aborted) setSearching(false)
       }
     }, 300)
-    return () => { clearTimeout(timer); cancelled = true }
+    return () => { clearTimeout(timer); controller.abort() }
   }, [searchQuery, ingredients])
 
   if (!ingredients) return (
     <div>
       <NavBar ingredients={[]} />
-      <div className="empty-state" style={{ minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="empty-state empty-state--full">
         <div style={{ fontSize: '2.5rem', marginBottom: '1.25rem' }}>🥗</div>
         <h3>No ingredients yet</h3>
         <p style={{ marginTop: '0.5rem' }}>Head back and upload a photo or type in what you have — we'll find recipes you can make right now.</p>
         <button
-          style={{ marginTop: '1.75rem', padding: '12px 32px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.95rem', fontWeight: 500 }}
+          className="btn-terra"
+          style={{ marginTop: '1.75rem', padding: '12px 32px', fontSize: '0.95rem' }}
           onClick={() => navigate('/')}
         >
           Add ingredients →
@@ -100,9 +117,8 @@ function Results() {
   )
 
   const isSearching = searchQuery.trim().length > 0
-  const searchReady = isSearching && searchResults !== null
-  const displayRecipes = searchReady
-    ? searchResults!.filter((r) => r.match_score > 0)
+  const displayRecipes = (isSearching && searchResults !== null)
+    ? searchResults.filter((r) => r.match_score > 0)
     : recipes
   const sorted = [...displayRecipes]
     .sort((a, b) => sortMode === 'health' ? b.health_score - a.health_score : b.match_score - a.match_score)
@@ -125,8 +141,10 @@ function Results() {
         onChange={handleSortChange}
         count={(loading || searching) ? undefined : visible.length}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={(q) => { setSearchQuery(q); setSearching(q.trim().length > 0) }}
       />
+
+      {searchError && <div className="error-state" style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{searchError}</div>}
 
       {loading && <div className="loading-state">Finding recipes for you…</div>}
 
@@ -143,7 +161,7 @@ function Results() {
         </div>
       )}
 
-      {!loading && !error && !searching && visible.length === 0 && (!isSearching || searchReady) && (
+      {!loading && !error && !searching && visible.length === 0 && (!isSearching || searchResults !== null) && (
         <div className="empty-state">
           {isSearching ? (
             <>

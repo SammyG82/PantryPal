@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState, memo } from 'react'
 import type { Recipe, SortMode } from '../types'
 
 const TAG_CLASSES: Record<string, string> = {
@@ -59,7 +59,8 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
   const handleHeartClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!onToggleFavourite) return
-    setPopping(true)
+    setPopping(false)
+    requestAnimationFrame(() => setPopping(true))
     onToggleFavourite(recipe)
   }
 
@@ -79,6 +80,25 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
   } = recipe
 
   const primaryScore = sortMode === 'health' ? health_score : match_score
+
+  const matchBar = (
+    <div className="match-row">
+      <span className="match-label">Match</span>
+      <div className="match-bar-bg">
+        <div className="match-bar-fill" style={{ width: `${match_score}%` }} />
+      </div>
+      <span className="match-val">{match_score}%</span>
+    </div>
+  )
+  const healthBar = (
+    <div className="health-row">
+      <span className="health-label">Health</span>
+      <div className="health-bar-bg">
+        <div className="health-bar-fill" style={{ width: `${health_score}%`, background: 'var(--sage)' }} />
+      </div>
+      <span className="health-val">{health_score}%</span>
+    </div>
+  )
 
   return (
     <div className="recipe-card">
@@ -116,41 +136,7 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
           <span>{matched_count} of {total_ingredients} ingredients</span>
         </div>
 
-        {sortMode === 'match' ? (
-          <>
-            <div className="match-row">
-              <span className="match-label">Match</span>
-              <div className="match-bar-bg">
-                <div className="match-bar-fill" style={{ width: `${match_score}%` }} />
-              </div>
-              <span className="match-val">{match_score}%</span>
-            </div>
-            <div className="health-row">
-              <span className="health-label">Health</span>
-              <div className="health-bar-bg">
-                <div className="health-bar-fill" style={{ width: `${health_score}%`, background: 'var(--sage)' }} />
-              </div>
-              <span className="health-val">{health_score}%</span>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="health-row">
-              <span className="health-label">Health</span>
-              <div className="health-bar-bg">
-                <div className="health-bar-fill" style={{ width: `${health_score}%`, background: 'var(--sage)' }} />
-              </div>
-              <span className="health-val">{health_score}%</span>
-            </div>
-            <div className="match-row">
-              <span className="match-label">Match</span>
-              <div className="match-bar-bg">
-                <div className="match-bar-fill" style={{ width: `${match_score}%` }} />
-              </div>
-              <span className="match-val">{match_score}%</span>
-            </div>
-          </>
-        )}
+        {sortMode === 'match' ? <>{matchBar}{healthBar}</> : <>{healthBar}{matchBar}</>}
 
         <div className="recipe-stats">
           <div className="stat-item">
@@ -179,4 +165,4 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
   )
 }
 
-export default RecipeCard
+export default memo(RecipeCard)

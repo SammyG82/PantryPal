@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { toTitleCase, API } from '../utils'
 
 interface IngredientInputProps {
@@ -7,11 +7,13 @@ interface IngredientInputProps {
 
 function IngredientInput({ onAdd }: IngredientInputProps) {
   const [value, setValue] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     const trimmed = toTitleCase(value)
-    if (!trimmed) return
+    if (!trimmed || submitting) return
     setValue('')
+    setSubmitting(true)
 
     try {
       const res = await fetch(`${API}/api/correct`, {
@@ -27,6 +29,8 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
       }
     } catch {
       onAdd(trimmed, false)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -40,10 +44,11 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
         type="text"
         placeholder="e.g. chicken, tomatoes..."
         value={value}
+        disabled={submitting}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
       />
-      <button type="button" className="add-btn" onClick={() => void handleSubmit()}>
+      <button type="button" className="add-btn" disabled={submitting} onClick={() => void handleSubmit()}>
         Add
       </button>
     </div>

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react'
+import React, { useRef, useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import UploadZone, { type UploadZoneHandle } from '../components/UploadZone'
@@ -19,30 +19,24 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
   const lastIngredients: string[] | undefined = location.state?.lastIngredients
   const uploadZoneRef = useRef<UploadZoneHandle>(null)
   const [unsupported, setUnsupported] = useState<Set<string>>(new Set())
-  const [recent, setRecent] = useState<{ ingredients: string[]; unsupported: string[] } | null>(null)
-
-  useEffect(() => {
-    const saved = localStorage.getItem('pantrypal_recent')
-    if (!saved) return
+  const [recent] = useState<{ ingredients: string[]; unsupported: string[] } | null>(() => {
     try {
+      const saved = localStorage.getItem('pantrypal_recent')
+      if (!saved) return null
       const parsed = JSON.parse(saved)
       const age = Date.now() - (parsed.savedAt ?? 0)
       if (age > 24 * 60 * 60 * 1000 || !Array.isArray(parsed.ingredients) || !Array.isArray(parsed.unsupported)) {
         localStorage.removeItem('pantrypal_recent')
-        return
+        return null
       }
-      setRecent(parsed)
-      const restored = new Set(
-        typedIngredients.filter((t) =>
-          parsed.unsupported.some((u: string) => u.toLowerCase() === t.toLowerCase())
-        )
-      )
-      if (restored.size > 0) setUnsupported(restored)
-    } catch { /* ignore */ }
-  }, [])
+      return parsed
+    } catch {
+      return null
+    }
+  })
 
   const detectedIngredients = useMemo(
-    () => uploads.filter((u) => u.ingredient !== null && !u.detecting).map((u) => u.ingredient as string),
+    () => [...new Set(uploads.filter((u) => u.ingredient !== null && !u.detecting).map((u) => u.ingredient as string))],
     [uploads]
   )
 
@@ -62,10 +56,9 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
     if (!supported) setUnsupported((prev) => new Set(prev).add(trimmed))
   }
 
-  const removeIngredient = (index: number) => {
-    const removed = typedIngredients[index]
-    setTypedIngredients((prev) => prev.filter((_, i) => i !== index))
-    setUnsupported((u) => { const next = new Set(u); next.delete(removed); return next })
+  const removeIngredient = (ing: string) => {
+    setTypedIngredients((prev) => prev.filter((i) => i !== ing))
+    setUnsupported((u) => { const next = new Set(u); next.delete(ing); return next })
   }
 
   const handleCook = () => {
@@ -83,7 +76,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
       unsupported: [...new Set([...unsupported, ...prevUnsupported])],
       savedAt: Date.now(),
     }))
-    navigate('/results', { state: { ingredients: allIngredients } })
+    navigate('/results', { state: { ingredients: allIngredients.slice(0, 20) } })
   }
 
   const recentAvailable = useMemo(
@@ -117,7 +110,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
               <UploadZone
                 ref={uploadZoneRef}
                 initialUploads={uploads}
-                onUploadsChange={(updated) => setUploads(updated)}
+                onUploadsChange={setUploads}
               />
             </div>
 
@@ -135,12 +128,12 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
                 {typedIngredients.length === 0 ? (
                   <span className="empty-hint">Your ingredients will appear here…</span>
                 ) : (
-                  typedIngredients.map((ing, i) => (
+                  typedIngredients.map((ing) => (
                     <IngredientChip
                       key={ing}
                       label={ing}
                       unsupported={unsupported.has(ing)}
-                      onRemove={() => removeIngredient(i)}
+                      onRemove={() => removeIngredient(ing)}
                     />
                   ))
                 )}
@@ -153,7 +146,7 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
                       <button
                         key={ing}
                         className="recent-chip"
-                        onClick={() => addIngredient(ing, !recent?.unsupported.includes(ing))}
+                        onClick={() => addIngredient(ing, !recent!.unsupported.includes(ing))}
                       >
                         + {ing}
                       </button>
@@ -171,8 +164,8 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
               </div>
               {allIngredients.length > 0 && (
                 <div className="footer-chips">
-                  {typedIngredients.map((ing, i) => (
-                    <IngredientChip key={ing} label={ing} unsupported={unsupported.has(ing)} onRemove={() => removeIngredient(i)} />
+                  {typedIngredients.map((ing) => (
+                    <IngredientChip key={ing} label={ing} unsupported={unsupported.has(ing)} onRemove={() => removeIngredient(ing)} />
                   ))}
                   {detectedIngredients
                     .filter((d) => !typedIngredients.some((t) => t.toLowerCase() === d.toLowerCase()))

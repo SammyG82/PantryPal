@@ -1,11 +1,15 @@
 # backend/recipe_search.py
 from __future__ import annotations
 from ast import literal_eval
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Set
+import logging
 import re
 import pandas as pd
 from rapidfuzz import fuzz, process
+
+logger = logging.getLogger(__name__)
 
 
 # -------------------------------------------------
@@ -35,7 +39,7 @@ ING_STOPWORDS = {
     "large", "small", "medium",
 
     # quality descriptors
-    "fresh", "freshly", "extra", "extra-virgin",
+    "fresh", "extra", "extra-virgin",
     "low-fat", "fat-free", "reduced", "light",
 
     # state/preparation
@@ -62,8 +66,8 @@ def _remove_numbers(text: str) -> str:
     """Remove integers and simple fractions like 1/2, 3/4."""
     if not isinstance(text, str):
         return ""
-    text = re.sub(r"\d+\/\d+", " ", text)
-    text = re.sub(r"\d+", " ", text)
+    text = _FRAC_RE.sub(" ", text)
+    text = _DIGIT_RE.sub(" ", text)
     return text
 
 
@@ -81,8 +85,8 @@ def _clean_ingredient_to_core(ing: str) -> str:
 
     ing = ing.lower()
     ing = _remove_numbers(ing)
-    ing = re.sub(r"[^\w\s]", " ", ing)
-    ing = re.sub(r"\s+", " ", ing).strip()
+    ing = _NON_WORD_RE.sub(" ", ing)
+    ing = _SPACES_RE.sub(" ", ing).strip()
 
     tokens: List[str] = []
     for tok in ing.split():
@@ -126,6 +130,11 @@ def _normalize_list(xs: List[str]) -> List[str]:
         normed.append(nx)
     return normed
 
+
+_FRAC_RE = re.compile(r"\d+\/\d+")
+_DIGIT_RE = re.compile(r"\d+")
+_NON_WORD_RE = re.compile(r"[^\w\s]")
+_SPACES_RE = re.compile(r"\s+")
 
 _CALORIES_RE = re.compile(r"Calories\s+(\d+)", re.IGNORECASE)
 _NUTRITION_RE: dict[str, re.Pattern] = {
@@ -183,7 +192,7 @@ def _ensure_recipes(path: Path) -> None:
         return
     try:
         from huggingface_hub import hf_hub_download
-        print("Downloading recipes.csv from HuggingFace...")
+        logger.info("Downloading recipes.csv from HuggingFace...")
         path.parent.mkdir(parents=True, exist_ok=True)
         hf_hub_download(
             repo_id=_RECIPES_HF_REPO,
@@ -191,7 +200,7 @@ def _ensure_recipes(path: Path) -> None:
             repo_type="dataset",
             local_dir=str(path.parent),
         )
-        print("Downloaded recipes.csv")
+        logger.info("Downloaded recipes.csv")
     except Exception as e:
         raise RuntimeError(f"recipes.csv not found and download failed: {e}") from e
 
@@ -208,11 +217,17 @@ def _normalise_cook_time(raw: str) -> str:
     m = _HR_RE.match(value)
     if m:
         hours = int(m.group(1))
+        mins = int(m.group(2)) if m.group(2) else 0
         if hours >= 24:
             days = hours // 24
             remaining = hours % 24
             label = f"{days} day{'s' if days != 1 else ''}"
-            return f"{label} {remaining} hr" if remaining else label
+            parts = [label]
+            if remaining:
+                parts.append(f"{remaining} hr")
+            if mins:
+                parts.append(f"{mins} min")
+            return " ".join(parts)
     return value
 
 
@@ -364,6 +379,24 @@ def _compute_match_score(pct_recipe: float, pct_user: float, jaccard: float) -> 
 # -------------------------------------------------
 # MATCHING LOGIC
 # -------------------------------------------------
+def _get_ingredient_candidates(user_cores: set[str]) -> set[int]:
+    """Row indices whose ingredients fuzzy-match any of user_cores."""
+    if not user_cores or not _inverted_index or not _ingredient_vocab_list:
+        return set()
+    candidates: set[int] = set()
+    for user_core in user_cores:
+        vocab_matches = process.extract(
+            user_core,
+            _ingredient_vocab_list,
+            scorer=fuzz.ratio,
+            score_cutoff=82,
+            limit=None,
+        )
+        for key, _score, _i in vocab_matches:
+            candidates.update(_inverted_index[key])
+    return candidates
+
+
 def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
@@ -377,28 +410,28 @@ def match_recipes(
     if not user_cores:
         return []
 
-    inv = _build_inverted_index(df)
-    vocab_list = _ingredient_vocab_list
-    candidate_indices: set[int] = set()
-    for user_core in user_cores:
-        matches = process.extract(
-            user_core,
-            vocab_list,
-            scorer=fuzz.ratio,
-            score_cutoff=82,
-            limit=None,
-        )
-        for key, _score, _i in matches:
-            candidate_indices.update(inv[key])
+    _build_inverted_index(df)
+    candidate_indices = _get_ingredient_candidates(user_cores)
 
     if not candidate_indices:
         return []
 
-    candidates: List[Dict] = []
-    candidates_batch = df.iloc[sorted(candidate_indices)]
+    # Pre-extract columns as numpy arrays — much faster than iterrows()
+    names        = df["display_name"].values
+    ing_norms    = df["ingredients_norm"].values
+    health_arr   = df["health_score"].values
+    protein_arr  = df["protein_g"].values
+    fat_arr      = df["fat_g"].values
+    sugar_arr    = df["sugar_g"].values
+    carbs_arr    = df["carbs_g"].values
+    calories_arr = df["calories"].values
+    cooktime_arr = df["cook_time"].values
+    url_arr      = df["url"].values
 
-    for global_idx, row in candidates_batch.iterrows():
-        recipe_cores = row["ingredients_norm"]
+    candidates: List[Dict] = []
+
+    for idx in candidate_indices:
+        recipe_cores = ing_norms[idx]
         if not recipe_cores:
             continue
 
@@ -413,35 +446,34 @@ def match_recipes(
             recipe_cores=recipe_set,
             threshold=0.82,
         )
-        matches = len(matched_ingredients)
+        n_matches = len(matched_ingredients)
 
-        if matches == 0:
+        if n_matches == 0:
             continue
 
-        pct_recipe = matches / recipe_size
-        pct_user = matches / len(user_cores)
-        union_size = len(user_cores | recipe_set)
-        jaccard = matches / union_size if union_size > 0 else 0.0
+        pct_recipe  = n_matches / recipe_size
+        pct_user    = n_matches / len(user_cores)
+        union_size  = len(user_cores | recipe_set)
+        jaccard     = n_matches / union_size if union_size > 0 else 0.0
         match_score = _compute_match_score(pct_recipe, pct_user, jaccard)
-        health_score = _compute_health_score(row)
 
         candidates.append({
-            "id":           int(global_idx),
-            "name":         row["display_name"],
-            "matches":      matches,
+            "id":           int(idx),
+            "name":         str(names[idx]),
+            "matches":      n_matches,
             "pct_recipe":   pct_recipe,
             "pct_user":     pct_user,
             "score":        match_score,
             "jaccard":      jaccard,
             "recipe_size":  recipe_size,
-            "health_score": health_score,
-            "protein_g":    float(row.get("protein_g", 0.0) or 0.0),
-            "fat_g":        float(row.get("fat_g", 0.0) or 0.0),
-            "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
-            "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
-            "calories":     int(row.get("calories", 0) or 0),
-            "cook_time":    str(row.get("cook_time", "") or ""),
-            "url":          str(row.get("url", "") or ""),
+            "health_score": float(health_arr[idx]),
+            "protein_g":    float(protein_arr[idx]),
+            "fat_g":        float(fat_arr[idx]),
+            "sugar_g":      float(sugar_arr[idx]),
+            "carbs_g":      float(carbs_arr[idx]),
+            "calories":     int(calories_arr[idx]),
+            "cook_time":    str(cooktime_arr[idx]),
+            "url":          str(url_arr[idx]),
         })
 
     if not candidates:
@@ -476,59 +508,60 @@ def _build_vocab(df: pd.DataFrame) -> set[str]:
     return _ingredient_vocab  # type: ignore[return-value]
 
 
-_correction_cache: dict[str, tuple[str, bool]] = {}
+@lru_cache(maxsize=4096)
+def _correct_cached(core: str, threshold: float) -> tuple[str, bool] | None:
+    if not _ingredient_vocab or not _ingredient_vocab_list:
+        return None
+    if core in _ingredient_vocab:
+        return (core.title(), True)
+    match = process.extractOne(core, _ingredient_vocab_list, scorer=fuzz.ratio, score_cutoff=threshold * 100)
+    if match:
+        return (match[0].title(), True)
+    return None
 
 
 def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.80) -> tuple[str, bool]:
-    cache_key = user_input.lower().strip()
-    if cache_key in _correction_cache:
-        return _correction_cache[cache_key]
-
     core = _clean_ingredient_to_core(user_input)
     if not core:
-        result = user_input.strip().title(), False
-        _correction_cache[cache_key] = result
-        return result
-
-    vocab = _build_vocab(df)
-    if not vocab:
-        result = user_input.strip().title(), False
-        _correction_cache[cache_key] = result
-        return result
-
-    if core in vocab:
-        result = core.title(), True
-        _correction_cache[cache_key] = result
-        return result
-
-    best_match = None
-    best_score = 0.0
-    for candidate in vocab:
-        score = fuzz.ratio(core, candidate) / 100.0
-        if score > best_score:
-            best_score = score
-            best_match = candidate
-
-    result = (best_match.title(), True) if (best_match and best_score >= threshold) else (user_input.strip().title(), False)
-    _correction_cache[cache_key] = result
-    return result
+        return user_input.strip().title(), False
+    _build_vocab(df)
+    result = _correct_cached(core, threshold)
+    return result if result is not None else (user_input.strip().title(), False)
 
 
-def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 20) -> List[Dict]:
+def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 100) -> List[Dict]:
     if not query.strip():
         return []
     q = query.strip().lower()
-    mask = df["display_name"].str.lower().str.contains(q, na=False)
-    matches = df[mask].head(limit)
+    mask = df["display_name"].str.lower().str.contains(q, na=False, regex=False)
+    name_indices = set(df.index[mask])
+
+    if not name_indices:
+        return []
 
     user_cores = _get_user_cores(user_ings) if user_ings else set()
 
-    results = []
-    for idx, row in matches.iterrows():
-        health_score = _compute_health_score(row)
-        cook_time_raw = str(row.get("cook_time", "") or "")
+    _build_inverted_index(df)
+    ingredient_candidates = _get_ingredient_candidates(user_cores)
+    match_indices = list(name_indices & ingredient_candidates) if ingredient_candidates else []
 
-        recipe_set = set(row["ingredients_norm"])
+    if not match_indices:
+        return []
+
+    names        = df["display_name"].values
+    ing_norms    = df["ingredients_norm"].values
+    health_arr   = df["health_score"].values
+    protein_arr  = df["protein_g"].values
+    fat_arr      = df["fat_g"].values
+    sugar_arr    = df["sugar_g"].values
+    carbs_arr    = df["carbs_g"].values
+    calories_arr = df["calories"].values
+    cooktime_arr = df["cook_time"].values
+    url_arr      = df["url"].values
+
+    results = []
+    for idx in match_indices:
+        recipe_set = set(ing_norms[idx])
         recipe_size = len(recipe_set)
         if user_cores and recipe_size > 0:
             matched = _fuzzy_intersection(user_cores, recipe_set)
@@ -543,17 +576,19 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
 
         results.append({
             "id":           int(idx),
-            "name":         row["display_name"],
+            "name":         str(names[idx]),
             "matches":      match_count,
             "score":        score,
             "recipe_size":  recipe_size,
-            "health_score": health_score,
-            "protein_g":    float(row.get("protein_g", 0.0) or 0.0),
-            "fat_g":        float(row.get("fat_g", 0.0) or 0.0),
-            "sugar_g":      float(row.get("sugar_g", 0.0) or 0.0),
-            "carbs_g":      float(row.get("carbs_g", 0.0) or 0.0),
-            "calories":     int(row.get("calories", 0) or 0),
-            "cook_time":    cook_time_raw,
-            "url":          str(row.get("url", "") or ""),
+            "health_score": float(health_arr[idx]),
+            "protein_g":    float(protein_arr[idx]),
+            "fat_g":        float(fat_arr[idx]),
+            "sugar_g":      float(sugar_arr[idx]),
+            "carbs_g":      float(carbs_arr[idx]),
+            "calories":     int(calories_arr[idx]),
+            "cook_time":    str(cooktime_arr[idx]),
+            "url":          str(url_arr[idx]),
         })
-    return results
+
+    results.sort(key=lambda r: -r["score"])
+    return results[:limit]

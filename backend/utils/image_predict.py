@@ -1,6 +1,7 @@
 # backend/utils/image_predict.py
 
 import json
+import logging
 from pathlib import Path
 import torch
 import torch.nn as nn
@@ -8,6 +9,8 @@ import torch.nn.functional as F
 import open_clip
 from PIL import Image
 from torchvision import transforms
+
+logger = logging.getLogger(__name__)
 
 # -------------------------
 # DEVICE
@@ -25,35 +28,16 @@ else:
 BASE_DIR = Path(__file__).parent.parent
 
 # -------------------------
-# DOWNLOAD MODEL FROM HUGGINGFACE IF NOT PRESENT
+# CONSTANTS
 # -------------------------
 HF_REPO = "SammyG82/Single_Ingredient_Identification"
 MODEL_DIR = BASE_DIR / "model"
+LABEL_MAP_PATH = MODEL_DIR / "label_map.json"
+MODEL_PATH = MODEL_DIR / "Food_Recognition_Model_94.pt"
 
-def _ensure_model_files():
-    from huggingface_hub import hf_hub_download
-    for filename in ["Food_Recognition_Model_94.pt", "label_map.json"]:
-        dest = MODEL_DIR / filename
-        if not dest.exists():
-            print(f"Downloading {filename} from HuggingFace...")
-            hf_hub_download(
-                repo_id=HF_REPO,
-                filename=filename,
-                local_dir=str(MODEL_DIR),
-            )
-            print(f"Downloaded {filename}")
-
-_ensure_model_files()
-LABEL_MAP_PATH = BASE_DIR / "model" / "label_map.json"
-MODEL_PATH = BASE_DIR / "model" / "Food_Recognition_Model_94.pt"
-
-# -------------------------
-# LOAD LABELS
-# -------------------------
-with open(LABEL_MAP_PATH, "r") as f:
-    labels = json.load(f)  # {"0": "apple", "1": "banana", ...}
-
-num_classes = len(labels)
+CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
+CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
+IMG_SIZE = 224
 
 # -------------------------
 # MODEL ARCHITECTURE
@@ -67,7 +51,6 @@ class CLIPIngredientClassifier(nn.Module):
             nn.Dropout(0.2),
             nn.Linear(embed_dim, num_classes),
         )
-        self.logit_scale = nn.Parameter(torch.ones([]) * torch.log(torch.tensor(1 / 0.07)))
 
     def encode_image(self, x):
         return F.normalize(self.encoder(x), dim=-1)
@@ -78,35 +61,65 @@ class CLIPIngredientClassifier(nn.Module):
         return logits, feats
 
 # -------------------------
-# BUILD & LOAD MODEL
+# LAZY STATE
 # -------------------------
-clip_model, _, _ = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
-model = CLIPIngredientClassifier(clip_model, num_classes).to(device)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-model.eval()
+_model: CLIPIngredientClassifier | None = None
+_transform = None
+_labels: dict | None = None
 
-# -------------------------
-# IMAGE TRANSFORM (matches training test_tf)
-# -------------------------
-CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
-CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
-IMG_SIZE = 224
 
-test_transform = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.CenterCrop(IMG_SIZE),
-    transforms.ToTensor(),
-    transforms.Normalize(CLIP_MEAN, CLIP_STD),
-])
+def _ensure_model_files() -> None:
+    from huggingface_hub import hf_hub_download
+    for filename in ["Food_Recognition_Model_94.pt", "label_map.json"]:
+        dest = MODEL_DIR / filename
+        if not dest.exists():
+            logger.info("Downloading %s from HuggingFace...", filename)
+            hf_hub_download(
+                repo_id=HF_REPO,
+                filename=filename,
+                local_dir=str(MODEL_DIR),
+            )
+            logger.info("Downloaded %s", filename)
+
+
+def load_model() -> None:
+    global _model, _transform, _labels
+    if _model is not None:
+        return
+
+    _ensure_model_files()
+
+    with open(LABEL_MAP_PATH, "r") as f:
+        _labels = json.load(f)
+
+    num_classes = len(_labels)
+    clip_model, _, _ = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
+    m = CLIPIngredientClassifier(clip_model, num_classes).to(device)
+    m.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True), strict=False)
+    m.eval()
+    _model = m
+    _transform = transforms.Compose([
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(CLIP_MEAN, CLIP_STD),
+    ])
+
 
 # -------------------------
 # PREDICT
 # -------------------------
 def predict_image(image: Image.Image) -> str:
-    x = test_transform(image).unsqueeze(0).to(device)
+    load_model()
+    if _model is None or _transform is None or _labels is None:
+        raise RuntimeError("Model not loaded — call load_model() first")
+
+    x = _transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        logits, _ = model(x)
+        logits, _ = _model(x)
         pred_idx = logits.argmax(1).item()
 
-    return labels[str(pred_idx)]
+    label = _labels.get(str(pred_idx))
+    if label is None:
+        raise ValueError(f"Model predicted class {pred_idx} not in label map (size {len(_labels)})")
+    return label

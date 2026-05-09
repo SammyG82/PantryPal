@@ -1,14 +1,30 @@
 # backend/app.py
 from __future__ import annotations
 
+import asyncio
 import io
+import logging
 from contextlib import asynccontextmanager
 from typing import List
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from typing import Annotated
+from pydantic import BaseModel, Field, StringConstraints
 from PIL import Image
+
+logger = logging.getLogger(__name__)
+
+_IMAGE_MAGIC = (
+    b'\xff\xd8\xff',       # JPEG
+    b'\x89PNG\r\n\x1a\n',  # PNG
+    b'GIF87a',             # GIF87
+    b'GIF89a',             # GIF89
+    b'RIFF',               # WebP
+    b'BM',                 # BMP
+    b'II*\x00',            # TIFF LE
+    b'MM\x00*',            # TIFF BE
+)
 
 # -------------------------------------------------
 # App setup
@@ -52,7 +68,8 @@ _predictor = None
 def get_predictor():
     global _predictor
     if _predictor is None:
-        from utils.image_predict import predict_image
+        from utils.image_predict import predict_image, load_model
+        load_model()
         _predictor = predict_image
     return _predictor
 
@@ -60,8 +77,10 @@ def get_predictor():
 # -------------------------------------------------
 # Request / Response models
 # -------------------------------------------------
+_Ingredient = Annotated[str, StringConstraints(max_length=200)]
+
 class RecipesRequest(BaseModel):
-    ingredients: List[str]
+    ingredients: List[_Ingredient]
 
 
 class RecipeResponse(BaseModel):
@@ -136,23 +155,31 @@ async def detect_ingredients(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File must be an image")
 
     try:
-        contents = await file.read()
+        contents = await file.read(10 * 1024 * 1024 + 1)
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+        if not any(contents.startswith(m) for m in _IMAGE_MAGIC):
+            raise HTTPException(status_code=400, detail="File must be a valid image")
         image = Image.open(io.BytesIO(contents)).convert("RGB")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not read image: {e}")
+        logger.exception("Image read failed")
+        raise HTTPException(status_code=400, detail="Could not read image")
 
     try:
-        predict_image = get_predictor()
-        label = predict_image(image)
+        predict_fn = get_predictor()
+        label = await asyncio.get_running_loop().run_in_executor(None, predict_fn, image)
         ingredients = [label] if label else []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Model inference failed: {e}")
+    except Exception:
+        logger.exception("Model inference failed")
+        raise HTTPException(status_code=500, detail="Model inference failed")
 
     return DetectResponse(ingredients=ingredients)
 
 
 class CorrectRequest(BaseModel):
-    ingredient: str
+    ingredient: str = Field(..., max_length=200)
 
 
 class CorrectResponse(BaseModel):
@@ -161,8 +188,8 @@ class CorrectResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    q: str
-    ingredients: List[str] = []
+    q: str = Field(..., max_length=200)
+    ingredients: List[_Ingredient] = []
 
 
 @app.post("/api/correct", response_model=CorrectResponse)
@@ -203,4 +230,4 @@ def get_recipes(body: RecipesRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)

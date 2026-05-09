@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { toTitleCase, API } from '../utils'
 import IngredientChip from './IngredientChip'
 import type { Upload } from '../types'
@@ -24,41 +24,55 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       onUploadsChangeRef.current?.(uploads.filter(u => !u.detecting))
     }, [uploads])
 
-    const uploadsRef = useRef(uploads)
-    useEffect(() => { uploadsRef.current = uploads }, [uploads])
-    useEffect(() => () => { uploadsRef.current.forEach(u => URL.revokeObjectURL(u.url)) }, [])
+    const allUrlsRef = useRef<Set<string>>(new Set(initialUploads?.map(u => u.url)))
+    const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+    useEffect(() => () => {
+      abortControllersRef.current.forEach(c => c.abort())
+    }, [])
 
     const processFile = async (file: File) => {
       if (!file.type.startsWith('image/')) return
 
       const id = crypto.randomUUID()
       const url = URL.createObjectURL(file)
-      const entry: Upload = { id, url, ingredient: null, detecting: true }
+      allUrlsRef.current.add(url)
 
+      const controller = new AbortController()
+      abortControllersRef.current.set(id, controller)
+
+      const entry: Upload = { id, url, ingredient: null, detecting: true }
       setUploads((prev) => [...prev, entry])
 
       try {
         const formData = new FormData()
         formData.append('file', file)
-        const res = await fetch(`${API}/api/detect`, { method: 'POST', body: formData })
+        const res = await fetch(`${API}/api/detect`, { method: 'POST', body: formData, signal: controller.signal })
         if (res.ok) {
           const data = await res.json() as { ingredients: string[] }
-          const raw = data.ingredients?.[0] ?? null
+          const raw = (data.ingredients?.[0] ?? '').trim()
           const ingredient = raw ? toTitleCase(raw) : null
           setUploads((prev) => prev.map((u) => u.id === id ? { ...u, ingredient, detecting: false } : u))
         } else {
           setUploads((prev) => prev.map((u) => u.id === id ? { ...u, detecting: false } : u))
         }
       } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return
         console.error('Detection failed:', err)
         setUploads((prev) => prev.map((u) => u.id === id ? { ...u, detecting: false } : u))
+      } finally {
+        abortControllersRef.current.delete(id)
       }
     }
 
     const removeById = (id: string) => {
+      abortControllersRef.current.get(id)?.abort()
+      abortControllersRef.current.delete(id)
       setUploads((prev) => {
-        const removed = prev.find((u) => u.id === id)
-        if (removed) URL.revokeObjectURL(removed.url)
+        const removed = prev.find(u => u.id === id)
+        if (removed) {
+          URL.revokeObjectURL(removed.url)
+          allUrlsRef.current.delete(removed.url)
+        }
         return prev.filter((u) => u.id !== id)
       })
     }
@@ -66,8 +80,11 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
     const removeByIngredient = (ingredient: string) => {
       setUploads((prev) => {
         prev
-          .filter((u) => u.ingredient?.toLowerCase() === ingredient.toLowerCase())
-          .forEach((u) => URL.revokeObjectURL(u.url))
+          .filter(u => u.ingredient?.toLowerCase() === ingredient.toLowerCase())
+          .forEach(u => {
+            URL.revokeObjectURL(u.url)
+            allUrlsRef.current.delete(u.url)
+          })
         return prev.filter((u) => u.ingredient?.toLowerCase() !== ingredient.toLowerCase())
       })
     }
@@ -79,12 +96,13 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       setDragOver(false)
 
       if (e.dataTransfer.files.length > 0) {
-        Array.from(e.dataTransfer.files).forEach(processFile)
+        Array.from(e.dataTransfer.files).forEach(f => void processFile(f))
         return
       }
 
       const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
       if (uri) {
+        if (!uri.startsWith('https://') && !uri.startsWith('http://')) return
         try {
           const res = await fetch(uri)
           const blob = await res.blob()
@@ -98,7 +116,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) Array.from(e.target.files).forEach(processFile)
+      if (e.target.files) Array.from(e.target.files).forEach(f => void processFile(f))
       e.target.value = ''
     }
 
@@ -109,7 +127,10 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       <div>
         <div
           className={`upload-zone${dragOver ? ' drag-over' : ''}`}
+          role="button"
+          tabIndex={0}
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
@@ -133,7 +154,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
           <div className="photo-thumbs">
             {uploads.map((u) => (
               <div className="thumb" key={u.id}>
-                <img src={u.url} alt="upload preview" />
+                <img src={u.url} alt={u.ingredient ? `Uploaded: ${u.ingredient}` : u.detecting ? 'Uploaded image (detecting…)' : 'Uploaded image'} />
                 <button className="thumb-x" onClick={(e) => { e.stopPropagation(); removeById(u.id) }}>×</button>
               </div>
             ))}
