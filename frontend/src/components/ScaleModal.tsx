@@ -76,6 +76,11 @@ export default function ScaleModal({ recipe, onClose }: Props) {
   const modalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    return () => { prev?.focus() }
+  }, [])
+
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)

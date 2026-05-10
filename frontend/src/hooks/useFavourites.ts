@@ -21,7 +21,7 @@ export function useFavourites() {
       const next = prev.some(r => r.id === recipe.id)
         ? prev.filter(r => r.id !== recipe.id)
         : [...prev, recipe]
-      localStorage.setItem(KEY, JSON.stringify(next))
+      try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* quota exceeded */ }
       return next
     })
   }, [])
