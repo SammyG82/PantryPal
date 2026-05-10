@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import struct
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -20,11 +21,17 @@ _IMAGE_MAGIC = (
     b'\x89PNG\r\n\x1a\n',  # PNG
     b'GIF87a',             # GIF87
     b'GIF89a',             # GIF89
-    b'RIFF',               # WebP
     b'BM',                 # BMP
     b'II*\x00',            # TIFF LE
     b'MM\x00*',            # TIFF BE
 )
+
+
+def _is_valid_image(contents: bytes) -> bool:
+    if any(contents.startswith(m) for m in _IMAGE_MAGIC):
+        return True
+    # WebP: bytes 0–3 are RIFF, bytes 8–11 are WEBP
+    return contents[:4] == b'RIFF' and contents[8:12] == b'WEBP'
 
 # -------------------------------------------------
 # App setup
@@ -77,7 +84,7 @@ def get_predictor():
 # -------------------------------------------------
 # Request / Response models
 # -------------------------------------------------
-_Ingredient = Annotated[str, StringConstraints(max_length=200)]
+_Ingredient = Annotated[str, StringConstraints(min_length=1, max_length=200, strip_whitespace=True)]
 
 _VALID_DIETARY = frozenset({"vegetarian", "vegan", "gluten_free"})
 
@@ -175,21 +182,24 @@ async def detect_ingredients(file: UploadFile = File(...)):
     """
     Accept a multipart image upload, run the CNN, return detected ingredient(s).
     """
-    if not file.content_type or not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.lower().startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
     try:
         contents = await file.read(10 * 1024 * 1024 + 1)
         if len(contents) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
-        if not any(contents.startswith(m) for m in _IMAGE_MAGIC):
+        if not _is_valid_image(contents):
             raise HTTPException(status_code=400, detail="File must be a valid image")
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception("Image read failed")
+    except (OSError, ValueError, struct.error):
+        logger.warning("Image decode failed", exc_info=True)
         raise HTTPException(status_code=400, detail="Could not read image")
+    except Exception:
+        logger.exception("Unexpected error reading image")
+        raise HTTPException(status_code=500, detail="Server error processing image")
 
     try:
         predict_fn = get_predictor()

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { Recipe } from '../types'
 
@@ -73,6 +73,7 @@ interface Props {
 export default function ScaleModal({ recipe, onClose }: Props) {
   const [multiplier, setMultiplier] = useState(1)
   const ingredients = recipe.ingredients ?? []
+  const modalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -81,13 +82,34 @@ export default function ScaleModal({ recipe, onClose }: Props) {
   }, [onClose])
 
   useEffect(() => {
+    const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
+    const modal = modalRef.current
+    if (!modal) return
+    const focusable = Array.from(modal.querySelectorAll<HTMLElement>('button:not([disabled])'))
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus() }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', trap)
+    return () => document.removeEventListener('keydown', trap)
   }, [])
 
   return createPortal(
     <div className="scale-overlay" onClick={onClose}>
       <div
+        ref={modalRef}
         className="info-modal scale-modal"
         role="dialog"
         aria-modal="true"
@@ -96,7 +118,7 @@ export default function ScaleModal({ recipe, onClose }: Props) {
       >
         <div className="info-modal-header">
           <span id="scale-modal-title" className="info-modal-title">{recipe.name}</span>
-          <button className="info-close" onClick={onClose} aria-label="Close">×</button>
+          <button className="info-close" autoFocus onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="scale-controls">
@@ -142,19 +164,19 @@ export default function ScaleModal({ recipe, onClose }: Props) {
 
         <div className="scale-nutrition">
           <div className="scale-nutrition-item">
-            <span className="scale-nutrition-val">{Math.round(recipe.calories * multiplier)}</span>
+            <span className="scale-nutrition-val">{recipe.calories ? Math.round(recipe.calories * multiplier) : '–'}</span>
             <span className="scale-nutrition-key">kcal</span>
           </div>
           <div className="scale-nutrition-item">
-            <span className="scale-nutrition-val">{Math.round(recipe.protein * multiplier)}g</span>
+            <span className="scale-nutrition-val">{recipe.protein ? `${Math.round(recipe.protein * multiplier)}g` : '–'}</span>
             <span className="scale-nutrition-key">protein</span>
           </div>
           <div className="scale-nutrition-item">
-            <span className="scale-nutrition-val">{Math.round(recipe.fat * multiplier)}g</span>
+            <span className="scale-nutrition-val">{recipe.fat ? `${Math.round(recipe.fat * multiplier)}g` : '–'}</span>
             <span className="scale-nutrition-key">fat</span>
           </div>
           <div className="scale-nutrition-item">
-            <span className="scale-nutrition-val">{Math.round(recipe.carbs * multiplier)}g</span>
+            <span className="scale-nutrition-val">{recipe.carbs ? `${Math.round(recipe.carbs * multiplier)}g` : '–'}</span>
             <span className="scale-nutrition-key">carbs</span>
           </div>
         </div>

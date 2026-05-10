@@ -5,8 +5,10 @@ const KEY = 'pantrypal_favourites'
 
 function load(): Recipe[] {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '[]')
+    const parsed = JSON.parse(localStorage.getItem(KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
   } catch {
+    localStorage.removeItem(KEY)
     return []
   }
 }

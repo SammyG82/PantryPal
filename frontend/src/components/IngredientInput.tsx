@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { toTitleCase, API } from '../utils'
 
 interface IngredientInputProps {
@@ -8,6 +8,9 @@ interface IngredientInputProps {
 function IngredientInput({ onAdd }: IngredientInputProps) {
   const [value, setValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => { abortRef.current?.abort() }, [])
 
   const handleSubmit = async () => {
     const trimmed = toTitleCase(value)
@@ -15,11 +18,15 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
     setValue('')
     setSubmitting(true)
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
       const res = await fetch(`${API}/api/correct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredient: trimmed }),
+        signal: controller.signal,
       })
       if (res.ok) {
         const data = await res.json() as { corrected: string; found: boolean }
@@ -27,8 +34,8 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
       } else {
         onAdd(trimmed, false)
       }
-    } catch {
-      onAdd(trimmed, false)
+    } catch (err) {
+      if ((err as { name?: string }).name !== 'AbortError') onAdd(trimmed, false)
     } finally {
       setSubmitting(false)
     }
@@ -42,6 +49,7 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
     <div className="text-row">
       <input
         type="text"
+        aria-label="Add an ingredient"
         placeholder="e.g. chicken, tomatoes..."
         value={value}
         disabled={submitting}

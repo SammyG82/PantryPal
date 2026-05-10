@@ -375,6 +375,7 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     out["is_vegan"]       = out["is_vegetarian"] & ~_has_dairy & ~_has_egg & ~_has_honey
     out["is_gluten_free"] = ~_ing_no_gf_flour.str.contains(_GLUTEN_RE, regex=True)
 
+    out = out.reset_index(drop=True)
     return out
 
 
@@ -457,13 +458,18 @@ def _dietary_flags(idx, veg_arr, vegan_arr, gf_arr) -> List[str]:
 # -------------------------------------------------
 # MATCHING LOGIC
 # -------------------------------------------------
+_FUZZY_SCORE_CUTOFF = 82  # kept in sync with _fuzzy_intersection default threshold (0.82 * 100)
+
+
 @lru_cache(maxsize=2048)
 def _candidates_for_core(user_core: str) -> frozenset[int]:
+    if not _ingredient_vocab_list or not _inverted_index:
+        return frozenset()
     vocab_matches = process.extract(
         user_core,
         _ingredient_vocab_list,
         scorer=fuzz.ratio,
-        score_cutoff=82,
+        score_cutoff=_FUZZY_SCORE_CUTOFF,
         limit=None,
     )
     candidates: set[int] = set()
@@ -616,6 +622,8 @@ def _build_vocab(df: pd.DataFrame) -> set[str]:
 
 @lru_cache(maxsize=4096)
 def _correct_cached(core: str, threshold: float) -> tuple[str, bool] | None:
+    if not _ingredient_vocab:
+        return None
     if core in _ingredient_vocab:
         return (core.title(), True)
     match = process.extractOne(core, _ingredient_vocab_list, scorer=fuzz.ratio, score_cutoff=threshold * 100)
@@ -653,7 +661,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
 
     _build_inverted_index(df)
     ingredient_candidates = _get_ingredient_candidates(user_cores)
-    match_indices = list(name_indices & ingredient_candidates) if ingredient_candidates else []
+    match_indices = list(name_indices & ingredient_candidates) if ingredient_candidates else list(name_indices)
 
     if not match_indices:
         return []
@@ -677,6 +685,8 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     for idx in match_indices:
         recipe_set = set(ing_norms[idx])
         recipe_size = len(recipe_set)
+        if recipe_size <= 1:
+            continue
         missing_raw: list[str] = []
         if user_cores and recipe_size > 0:
             matched = _fuzzy_intersection(user_cores, recipe_set)

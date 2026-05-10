@@ -27,12 +27,23 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
 
     const allUrlsRef = useRef<Set<string>>(new Set(initialUploads?.map(u => u.url)))
     const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+    const dragErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => () => {
       abortControllersRef.current.forEach(c => c.abort())
+      if (dragErrorTimerRef.current !== null) clearTimeout(dragErrorTimerRef.current)
     }, [])
 
+    const showDragError = (msg: string) => {
+      setDragError(msg)
+      if (dragErrorTimerRef.current !== null) clearTimeout(dragErrorTimerRef.current)
+      dragErrorTimerRef.current = setTimeout(() => setDragError(null), 4000)
+    }
+
     const processFile = async (file: File) => {
-      if (!file.type.startsWith('image/')) return
+      if (!file.type.startsWith('image/')) {
+        showDragError('Only image files are supported.')
+        return
+      }
 
       const id = crypto.randomUUID()
       const url = URL.createObjectURL(file)
@@ -83,6 +94,8 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
         prev
           .filter(u => u.ingredient?.toLowerCase() === ingredient.toLowerCase())
           .forEach(u => {
+            abortControllersRef.current.get(u.id)?.abort()
+            abortControllersRef.current.delete(u.id)
             URL.revokeObjectURL(u.url)
             allUrlsRef.current.delete(u.url)
           })
@@ -104,15 +117,24 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
       if (uri) {
         if (!uri.startsWith('https://') && !uri.startsWith('http://')) return
+        const dropId = crypto.randomUUID()
+        const dropController = new AbortController()
+        abortControllersRef.current.set(dropId, dropController)
         try {
-          const res = await fetch(uri)
+          const res = await fetch(uri, { signal: dropController.signal })
           const blob = await res.blob()
-          if (!blob.type.startsWith('image/')) return
-          const file = new File([blob], 'dragged-image.jpg', { type: blob.type })
+          if (blob.type && !blob.type.startsWith('image/')) {
+            showDragError('Could not load that image. Save it to your device and upload it instead.')
+            return
+          }
+          const file = new File([blob], 'dragged-image.jpg', { type: blob.type || 'image/jpeg' })
           processFile(file)
-        } catch {
-          setDragError('Could not load that image. Save it to your device and upload it instead.')
-          setTimeout(() => setDragError(null), 4000)
+        } catch (err) {
+          if ((err as { name?: string }).name !== 'AbortError') {
+            showDragError('Could not load that image. Save it to your device and upload it instead.')
+          }
+        } finally {
+          abortControllersRef.current.delete(dropId)
         }
       }
     }

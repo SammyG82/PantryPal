@@ -13,10 +13,11 @@ function Results() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const ingredients: string[] | null = location.state?.ingredients ?? null
+  const raw = location.state?.ingredients
+  const ingredients: string[] | null = Array.isArray(raw) ? raw : null
 
   const [recipes, setRecipes] = useState<Recipe[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(ingredients !== null)
   const [error, setError] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('match')
   const [searchQuery, setSearchQuery] = useState('')
@@ -33,7 +34,10 @@ function Results() {
 
   useEffect(() => {
     if (!showInfo) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowInfo(false); infoButtonRef.current?.focus() } }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setShowInfo(false); infoButtonRef.current?.focus() }
+      else if (e.key === 'Tab') e.preventDefault()
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [showInfo])
@@ -150,7 +154,7 @@ function Results() {
       <SortBar
         current={sortMode}
         onChange={handleSortChange}
-        count={(loading || searching) ? undefined : visible.length}
+        count={(loading || searching) ? undefined : sorted.length}
         searchQuery={searchQuery}
         onSearchChange={(q) => { setSearchQuery(q); setSearching(q.trim().length > 0) }}
         dietaryFilters={dietaryFilters}
@@ -199,7 +203,7 @@ function Results() {
 
       {!loading && !error && visible.length > 0 && (
         <>
-          <div className="recipe-grid">
+          <div className="recipe-grid" role="region" aria-label="Recipe results">
             {visible.map((recipe, i) => (
               <RecipeCard key={recipe.id} recipe={recipe} rank={i + 1} sortMode={sortMode} isFavourited={isFavourited(recipe.id)} onToggleFavourite={toggleFavourite} />
             ))}
@@ -221,7 +225,7 @@ function Results() {
           <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onClick={e => e.stopPropagation()}>
             <div className="info-modal-header">
               <span id="info-modal-title" className="info-modal-title">How we rank recipes</span>
-              <button className="info-close" onClick={() => { setShowInfo(false); infoButtonRef.current?.focus() }} aria-label="Close">×</button>
+              <button className="info-close" autoFocus onClick={() => { setShowInfo(false); infoButtonRef.current?.focus() }} aria-label="Close">×</button>
             </div>
             <div className="info-modal-sub">Ingredients match approximately · Recipes without nutrition data score 0 for health</div>
 

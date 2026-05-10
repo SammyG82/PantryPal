@@ -116,7 +116,7 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
       <div className="recipe-img" style={{ background: getGradient(tags) }}>
         {getEmoji(name)}
         <span className="rank-badge">#{rank}</span>
-        <span className={`score-badge ${getScoreClass(primaryScore)}`}>
+        <span className={`score-badge ${getScoreClass(primaryScore)}`} aria-hidden="true">
           {primaryScore}%
         </span>
         {onToggleFavourite && (
@@ -154,7 +154,12 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
             {missingIngredients.length > 0 && (
               <>
                 {' · '}
-                <button className="missing-toggle" onClick={() => setShowMissing(s => !s)}>
+                <button
+                  className="missing-toggle"
+                  onClick={() => setShowMissing(s => !s)}
+                  aria-expanded={showMissing}
+                  aria-label={`${missingIngredients.length} missing ingredient${missingIngredients.length !== 1 ? 's' : ''}`}
+                >
                   {missingIngredients.length} to buy {showMissing ? '▴' : '▾'}
                 </button>
               </>
@@ -164,7 +169,7 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
 
         {showMissing && missingIngredients.length > 0 && (
           <ul className="missing-list">
-            {missingIngredients.map((ing, i) => <li key={i}>{ing}</li>)}
+            {missingIngredients.map((ing) => <li key={ing}>{ing}</li>)}
           </ul>
         )}
 

@@ -70,12 +70,14 @@ function Home({ typedIngredients, setTypedIngredients, uploads, setUploads }: Ho
       ...prevIngredients.filter(
         (p) => !allIngredients.some((a) => a.toLowerCase() === p.toLowerCase())
       ),
-    ].slice(0, 10)
-    localStorage.setItem('pantrypal_recent', JSON.stringify({
-      ingredients: merged,
-      unsupported: [...new Set([...unsupported, ...prevUnsupported])],
-      savedAt: Date.now(),
-    }))
+    ].slice(0, 20)
+    try {
+      localStorage.setItem('pantrypal_recent', JSON.stringify({
+        ingredients: merged,
+        unsupported: [...new Set([...unsupported, ...prevUnsupported])],
+        savedAt: Date.now(),
+      }))
+    } catch { /* quota / private mode — skip recent save */ }
     navigate('/results', { state: { ingredients: allIngredients.slice(0, 20) } })
   }
 
