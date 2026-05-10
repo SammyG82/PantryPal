@@ -499,12 +499,25 @@ def match_recipes(
             "cook_time":       str(cooktime_arr[idx]),
             "url":             str(url_arr[idx]),
             "ingredients_raw": list(ing_raw_arr[idx]),
+            "matched_cores":   matched_ingredients,
         })
 
     if not candidates:
         return []
 
-    return heapq.nlargest(quota, candidates, key=lambda c: (c["score"], -c["recipe_size"]))
+    top = heapq.nlargest(quota, candidates, key=lambda c: (c["score"], -c["recipe_size"]))
+    for r in top:
+        matched_cores = r.pop("matched_cores")
+        missing_raw: list[str] = []
+        seen: set[str] = set()
+        for raw_ing in r["ingredients_raw"]:
+            core = _clean_ingredient_to_core(raw_ing)
+            if not core or core in matched_cores or core in seen:
+                continue
+            seen.add(core)
+            missing_raw.append(raw_ing)
+        r["missing_raw"] = missing_raw
+    return top
 
 
 _ingredient_vocab: set[str] | None = None
@@ -586,6 +599,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     for idx in match_indices:
         recipe_set = set(ing_norms[idx])
         recipe_size = len(recipe_set)
+        missing_raw: list[str] = []
         if user_cores and recipe_size > 0:
             matched = _fuzzy_intersection(user_cores, recipe_set)
             match_count = len(matched)
@@ -593,6 +607,13 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             union_size = len(user_cores | recipe_set)
             jaccard = match_count / union_size if union_size > 0 else 0.0
             score = _compute_match_score(pct_recipe, match_count / len(user_cores), jaccard)
+            seen_m: set[str] = set()
+            for raw_ing in ing_raw_arr[idx]:
+                core = _clean_ingredient_to_core(raw_ing)
+                if not core or core in matched or core in seen_m:
+                    continue
+                seen_m.add(core)
+                missing_raw.append(raw_ing)
         else:
             match_count = 0
             score = 0.0
@@ -612,6 +633,7 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             "cook_time":       str(cooktime_arr[idx]),
             "url":             str(url_arr[idx]),
             "ingredients_raw": list(ing_raw_arr[idx]),
+            "missing_raw":     missing_raw,
         })
 
     results.sort(key=lambda r: -r["score"])

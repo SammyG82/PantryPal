@@ -57,6 +57,7 @@ interface RecipeCardProps {
 function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }: RecipeCardProps) {
   const [popping, setPopping] = useState(false)
   const [scaleOpen, setScaleOpen] = useState(false)
+  const [showMissing, setShowMissing] = useState(false)
 
   const handleHeartClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -80,6 +81,8 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
     tags,
     url,
   } = recipe
+
+  const missingIngredients = recipe.missing_ingredients ?? []
 
   const primaryScore = sortMode === 'health' ? health_score : match_score
 
@@ -135,8 +138,24 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
 
         <div className="recipe-meta">
           <span>⏱ {cook_time || 'N/A'}</span>
-          <span>{matched_count} of {total_ingredients} ingredients</span>
+          <span>
+            {matched_count} of {total_ingredients} ingredients
+            {missingIngredients.length > 0 && (
+              <>
+                {' · '}
+                <button className="missing-toggle" onClick={() => setShowMissing(s => !s)}>
+                  {missingIngredients.length} to buy {showMissing ? '▴' : '▾'}
+                </button>
+              </>
+            )}
+          </span>
         </div>
+
+        {showMissing && missingIngredients.length > 0 && (
+          <ul className="missing-list">
+            {missingIngredients.map((ing, i) => <li key={i}>{ing}</li>)}
+          </ul>
+        )}
 
         {sortMode === 'match' ? <>{matchBar}{healthBar}</> : <>{healthBar}{matchBar}</>}
 

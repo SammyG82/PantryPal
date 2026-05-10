@@ -22,4 +22,5 @@ export interface Recipe {
   tags: string[]
   url: string
   ingredients: string[]
+  missing_ingredients: string[]
 }
