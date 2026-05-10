@@ -22,8 +22,12 @@ A web app that suggests recipes based on ingredients you have. Type ingredients 
 - Upload a photo per ingredient — CLIP model predicts the label
 - Fuzzy ingredient matching (e.g. `chopped onions` ≈ `onions`)
 - Sort by **Best Match** (ingredient overlap) or **Healthiest** (nutrition score)
-- Recently used ingredients — quick-add chips from your last session (persisted 24 hrs)
-- Info modal explaining scoring, recipe name search, direct links to full recipes
+- **Missing ingredients** — each card shows what you'd need to buy to complete the recipe
+- **Scale nutrition** by servings — adjusts all nutrition values per serving count
+- **Favourites** — heart any recipe to save it; persisted across sessions
+- Search recipes by name, filtered against your ingredients
+- Recently used ingredients
+- Info modal explaining scoring, direct links to full recipes on Food.com
 - Responsive across mobile, tablet, and desktop
 
 ---
