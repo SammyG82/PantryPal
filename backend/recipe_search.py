@@ -79,6 +79,46 @@ MEAT_TOKENS = {
     "sausage", "ham"
 }
 
+# -------------------------------------------------
+# DIETARY CLASSIFICATION REGEXES
+# Applied to joined raw ingredient text at load time.
+# -------------------------------------------------
+_PLANT_DAIRY_RE = re.compile(
+    r'\b(coconut|almond|oat|soy|soya|rice|hemp|cashew)\s+(milk|cream|butter|cheese|yogurt)\b'
+    r'|\b(peanut|almond|cashew|sunflower|hazelnut|apple|peach|pumpkin|cocoa|shea)\s+butter\b'
+    r'|\bcream\s+of\s+tartar\b'
+    r'|\bnon[- ]dairy\s+(milk|cream|butter|cheese|yogurt)\b'
+    r'|\bdairy[- ]free\s+(milk|cream|butter|cheese|yogurt)\b',
+    re.IGNORECASE,
+)
+_GF_FLOUR_RE = re.compile(
+    r'\b(rice|almond|coconut|chickpea|tapioca|potato|corn|cassava|arrowroot|'
+    r'buckwheat|teff|amaranth|sorghum|millet)\s+flour\b'
+    r'|\bgluten[- ]free\s+flour\b',
+    re.IGNORECASE,
+)
+_MEAT_SEAFOOD_RE = re.compile(
+    r'\b(chicken|beef|pork|lamb|turkey|duck|goose|veal|venison|bison|'
+    r'bacon|ham|sausage|pepperoni|salami|prosciutto|pancetta|chorizo|'
+    r'fish|salmon|tuna|tilapia|cod|halibut|trout|bass|'
+    r'sardines?|shrimps?|prawns?|scallops?|crabs?|lobsters?|oysters?|clams?|'
+    r'mussels?|squids?|calamari|anchovy|anchovies|gelatin|lard|suet)\b',
+    re.IGNORECASE,
+)
+_DAIRY_RE = re.compile(
+    r'\b(milk|cream|cheese|butter|yogurt|yoghurt|ghee|whey|casein|lactose|buttermilk|'
+    r'half-and-half)\b',
+    re.IGNORECASE,
+)
+_EGG_RE = re.compile(r'\beggs?\b', re.IGNORECASE)
+_HONEY_RE = re.compile(r'\bhoney\b', re.IGNORECASE)
+_GLUTEN_RE = re.compile(
+    r'\b(wheat|flour|barley|rye|spelt|farro|bulgur|semolina|seitan|malt|triticale|'
+    r'couscous|pasta|noodles?|udon|ramen|bread|breadcrumbs?|panko|pita|cracker|crouton|oats?)\b'
+    r'|\bsoy\s+sauce\b',
+    re.IGNORECASE,
+)
+
 
 def _clean_ingredient_to_core(ing: str) -> str:
     if not isinstance(ing, str):
@@ -324,6 +364,17 @@ def load_recipes(csv_path: str | Path | None = None) -> pd.DataFrame:
     out["health_score"] = _compute_health_scores_vectorized(out)
     out["display_name_lower"] = out["display_name"].str.lower()
 
+    _ing_text = out["ingredients_raw"].str.join(" ")
+    _ing_no_plant_dairy = _ing_text.str.replace(_PLANT_DAIRY_RE, " ", regex=True)
+    _ing_no_gf_flour    = _ing_text.str.replace(_GF_FLOUR_RE, " ", regex=True)
+
+    out["is_vegetarian"]  = ~_ing_text.str.contains(_MEAT_SEAFOOD_RE, regex=True)
+    _has_dairy            = _ing_no_plant_dairy.str.contains(_DAIRY_RE, regex=True)
+    _has_egg              = _ing_text.str.contains(_EGG_RE, regex=True)
+    _has_honey            = _ing_text.str.contains(_HONEY_RE, regex=True)
+    out["is_vegan"]       = out["is_vegetarian"] & ~_has_dairy & ~_has_egg & ~_has_honey
+    out["is_gluten_free"] = ~_ing_no_gf_flour.str.contains(_GLUTEN_RE, regex=True)
+
     return out
 
 
@@ -392,6 +443,17 @@ def _compute_match_score(pct_recipe: float, pct_user: float, jaccard: float) -> 
     return 0.6 * pct_recipe + 0.25 * pct_user + 0.15 * jaccard
 
 
+def _dietary_flags(idx, veg_arr, vegan_arr, gf_arr) -> List[str]:
+    flags: List[str] = []
+    if veg_arr is not None and veg_arr[idx]:
+        flags.append("vegetarian")
+    if vegan_arr is not None and vegan_arr[idx]:
+        flags.append("vegan")
+    if gf_arr is not None and gf_arr[idx]:
+        flags.append("gluten_free")
+    return flags
+
+
 # -------------------------------------------------
 # MATCHING LOGIC
 # -------------------------------------------------
@@ -424,6 +486,7 @@ def match_recipes(
     user_ings: List[str],
     df: pd.DataFrame,
     quota: int = 50,
+    valid_indices: set | None = None,
 ) -> List[Dict]:
     if not user_ings:
         return []
@@ -435,6 +498,8 @@ def match_recipes(
 
     _build_inverted_index(df)
     candidate_indices = _get_ingredient_candidates(user_cores)
+    if valid_indices is not None:
+        candidate_indices = candidate_indices & valid_indices
 
     if not candidate_indices:
         return []
@@ -451,6 +516,9 @@ def match_recipes(
     cooktime_arr = df["cook_time"].values
     url_arr      = df["url"].values
     ing_raw_arr  = df["ingredients_raw"].values
+    veg_arr      = df["is_vegetarian"].values if "is_vegetarian" in df.columns else None
+    vegan_arr    = df["is_vegan"].values      if "is_vegan"      in df.columns else None
+    gf_arr       = df["is_gluten_free"].values if "is_gluten_free" in df.columns else None
 
     candidates: List[Dict] = []
 
@@ -482,24 +550,25 @@ def match_recipes(
         match_score = _compute_match_score(pct_recipe, pct_user, jaccard)
 
         candidates.append({
-            "id":           int(idx),
-            "name":         str(names[idx]),
-            "matches":      n_matches,
-            "pct_recipe":   pct_recipe,
-            "pct_user":     pct_user,
-            "score":        match_score,
-            "jaccard":      jaccard,
-            "recipe_size":  recipe_size,
-            "health_score": float(health_arr[idx]),
-            "protein_g":    float(protein_arr[idx]),
-            "fat_g":        float(fat_arr[idx]),
-            "sugar_g":      float(sugar_arr[idx]),
-            "carbs_g":      float(carbs_arr[idx]),
-            "calories":        int(calories_arr[idx]),
-            "cook_time":       str(cooktime_arr[idx]),
-            "url":             str(url_arr[idx]),
+            "id":            int(idx),
+            "name":          str(names[idx]),
+            "matches":       n_matches,
+            "pct_recipe":    pct_recipe,
+            "pct_user":      pct_user,
+            "score":         match_score,
+            "jaccard":       jaccard,
+            "recipe_size":   recipe_size,
+            "health_score":  float(health_arr[idx]),
+            "protein_g":     float(protein_arr[idx]),
+            "fat_g":         float(fat_arr[idx]),
+            "sugar_g":       float(sugar_arr[idx]),
+            "carbs_g":       float(carbs_arr[idx]),
+            "calories":      int(calories_arr[idx]),
+            "cook_time":     str(cooktime_arr[idx]),
+            "url":           str(url_arr[idx]),
             "ingredients_raw": list(ing_raw_arr[idx]),
-            "matched_cores":   matched_ingredients,
+            "matched_cores": matched_ingredients,
+            "dietary_flags": _dietary_flags(idx, veg_arr, vegan_arr, gf_arr),
         })
 
     if not candidates:
@@ -564,7 +633,7 @@ def correct_ingredient(user_input: str, df: pd.DataFrame, threshold: float = 0.8
     return result if result is not None else (user_input.strip().title(), False)
 
 
-def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 100) -> List[Dict]:
+def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = None, limit: int = 100, valid_indices: set | None = None) -> List[Dict]:
     if not query.strip():
         return []
     q = query.strip().lower()
@@ -575,6 +644,12 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
         return []
 
     user_cores = _get_user_cores(user_ings) if user_ings else set()
+
+    if valid_indices is not None:
+        name_indices = name_indices & valid_indices
+
+    if not name_indices:
+        return []
 
     _build_inverted_index(df)
     ingredient_candidates = _get_ingredient_candidates(user_cores)
@@ -594,6 +669,9 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
     cooktime_arr = df["cook_time"].values
     url_arr      = df["url"].values
     ing_raw_arr  = df["ingredients_raw"].values
+    veg_arr      = df["is_vegetarian"].values if "is_vegetarian" in df.columns else None
+    vegan_arr    = df["is_vegan"].values      if "is_vegan"      in df.columns else None
+    gf_arr       = df["is_gluten_free"].values if "is_gluten_free" in df.columns else None
 
     results = []
     for idx in match_indices:
@@ -619,21 +697,22 @@ def search_by_name(query: str, df: pd.DataFrame, user_ings: List[str] | None = N
             score = 0.0
 
         results.append({
-            "id":           int(idx),
-            "name":         str(names[idx]),
-            "matches":      match_count,
-            "score":        score,
-            "recipe_size":  recipe_size,
-            "health_score": float(health_arr[idx]),
-            "protein_g":    float(protein_arr[idx]),
-            "fat_g":        float(fat_arr[idx]),
-            "sugar_g":      float(sugar_arr[idx]),
-            "carbs_g":      float(carbs_arr[idx]),
-            "calories":        int(calories_arr[idx]),
-            "cook_time":       str(cooktime_arr[idx]),
-            "url":             str(url_arr[idx]),
+            "id":            int(idx),
+            "name":          str(names[idx]),
+            "matches":       match_count,
+            "score":         score,
+            "recipe_size":   recipe_size,
+            "health_score":  float(health_arr[idx]),
+            "protein_g":     float(protein_arr[idx]),
+            "fat_g":         float(fat_arr[idx]),
+            "sugar_g":       float(sugar_arr[idx]),
+            "carbs_g":       float(carbs_arr[idx]),
+            "calories":      int(calories_arr[idx]),
+            "cook_time":     str(cooktime_arr[idx]),
+            "url":           str(url_arr[idx]),
             "ingredients_raw": list(ing_raw_arr[idx]),
-            "missing_raw":     missing_raw,
+            "missing_raw":   missing_raw,
+            "dietary_flags": _dietary_flags(idx, veg_arr, vegan_arr, gf_arr),
         })
 
     results.sort(key=lambda r: -r["score"])

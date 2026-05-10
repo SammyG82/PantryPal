@@ -79,8 +79,12 @@ def get_predictor():
 # -------------------------------------------------
 _Ingredient = Annotated[str, StringConstraints(max_length=200)]
 
+_VALID_DIETARY = frozenset({"vegetarian", "vegan", "gluten_free"})
+
+
 class RecipesRequest(BaseModel):
     ingredients: List[_Ingredient]
+    dietary: List[str] = []
 
 
 class RecipeResponse(BaseModel):
@@ -99,6 +103,7 @@ class RecipeResponse(BaseModel):
     url: str
     ingredients: List[str] = []
     missing_ingredients: List[str] = []
+    dietary_flags: List[str] = []
 
 
 class DetectResponse(BaseModel):
@@ -121,6 +126,20 @@ def _tags_from_health(health_score_pct: int) -> List[str]:
     return _TAG_INDULGENT
 
 
+def _get_dietary_valid_indices(df, dietary: list[str]):
+    if not dietary:
+        return None
+    import pandas as pd
+    mask = pd.Series(True, index=df.index)
+    if "vegan" in dietary:
+        mask &= df["is_vegan"]
+    elif "vegetarian" in dietary:
+        mask &= df["is_vegetarian"]
+    if "gluten_free" in dietary:
+        mask &= df["is_gluten_free"]
+    return set(df.index[mask])
+
+
 def _to_recipe_response(r: dict) -> RecipeResponse:
     health_pct = round(r["health_score"] * 100)
     return RecipeResponse(
@@ -139,6 +158,7 @@ def _to_recipe_response(r: dict) -> RecipeResponse:
         url=r.get("url", "") or "",
         ingredients=r.get("ingredients_raw", []) or [],
         missing_ingredients=r.get("missing_raw", []) or [],
+        dietary_flags=r.get("dietary_flags", []) or [],
     )
 
 
@@ -194,6 +214,7 @@ class CorrectResponse(BaseModel):
 class SearchRequest(BaseModel):
     q: str = Field(..., max_length=200)
     ingredients: List[_Ingredient] = []
+    dietary: List[str] = []
 
 
 @app.post("/api/correct", response_model=CorrectResponse)
@@ -209,10 +230,15 @@ def search_recipes(body: SearchRequest):
     if not body.q.strip():
         return []
 
+    invalid = set(body.dietary) - _VALID_DIETARY
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Invalid dietary filter(s): {sorted(invalid)}")
+
     from recipe_search import search_by_name
 
     df = get_df()
-    results = search_by_name(body.q, df, user_ings=body.ingredients or None)
+    valid_indices = _get_dietary_valid_indices(df, body.dietary)
+    results = search_by_name(body.q, df, user_ings=body.ingredients or None, valid_indices=valid_indices)
 
     return [_to_recipe_response(r) for r in results]
 
@@ -224,10 +250,15 @@ def get_recipes(body: RecipesRequest):
     if len(body.ingredients) > 50:
         raise HTTPException(status_code=400, detail="Too many ingredients (max 50)")
 
+    invalid = set(body.dietary) - _VALID_DIETARY
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Invalid dietary filter(s): {sorted(invalid)}")
+
     from recipe_search import match_recipes
 
     df = get_df()
-    results = match_recipes(body.ingredients, df)
+    valid_indices = _get_dietary_valid_indices(df, body.dietary)
+    results = match_recipes(body.ingredients, df, valid_indices=valid_indices)
 
     return [_to_recipe_response(r) for r in results]
 

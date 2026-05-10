@@ -81,6 +81,10 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .recipe-search{border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:0.875rem;color:var(--ink);background:var(--cream);outline:none;transition:border-color .2s;width:220px;flex-shrink:0}
 .recipe-search:focus{border-color:var(--sage);outline:2px solid var(--sage);outline-offset:2px}
 .results-count{font-size:0.8rem;color:var(--muted)}
+.sort-bar-divider{width:1px;height:20px;background:var(--border);flex-shrink:0}
+.dietary-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:500;background:var(--sage-bg);color:var(--ink)}
+.dietary-badge--vegan{background:#d4edda}
+.dietary-badge--gf{background:#fff3cd}
 .recipe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem;padding:0 2.5rem 4rem;max-width:1100px;margin:0 auto}
 .recipe-card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .2s,box-shadow .2s;display:flex;flex-direction:column}
 .recipe-card:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(42,36,22,0.1)}
@@ -151,6 +155,7 @@ nav{background:var(--cream);border-bottom:1px solid var(--border);padding:0 2.5r
 .info-row-label{font-size:0.82rem;color:var(--ink)}
 .info-row-label span{font-size:0.75rem;color:var(--muted);display:block;font-weight:300;margin-top:1px}
 .info-row-pct{font-size:0.82rem;font-weight:500;color:var(--terra);white-space:nowrap}
+.info-modal-sub{font-size:0.75rem;color:var(--muted);line-height:1.4;margin-bottom:1.25rem}
 
 @media(max-width:700px){
   .input-cols{grid-template-columns:1fr}

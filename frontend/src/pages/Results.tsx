@@ -26,7 +26,9 @@ function Results() {
   const [showInfo, setShowInfo] = useState(false)
   const infoButtonRef = useRef<HTMLButtonElement>(null)
   const [visibleCount, setVisibleCount] = useState(RECIPES_PER_PAGE)
+  const [dietaryFilters, setDietaryFilters] = useState<string[]>([])
   const handleSortChange = (mode: SortMode) => { setSortMode(mode); setVisibleCount(RECIPES_PER_PAGE) }
+  const handleDietaryChange = (filters: string[]) => { setDietaryFilters(filters); setVisibleCount(RECIPES_PER_PAGE) }
   const { toggleFavourite, isFavourited } = useFavourites()
 
   useEffect(() => {
@@ -44,11 +46,12 @@ function Results() {
     const fetchRecipes = async () => {
       setLoading(true)
       setError(null)
+      setVisibleCount(RECIPES_PER_PAGE)
       try {
         const res = await fetch(`${API}/api/recipes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ingredients }),
+          body: JSON.stringify({ ingredients, dietary: dietaryFilters }),
           signal: controller.signal,
         })
         if (!res.ok) {
@@ -67,7 +70,7 @@ function Results() {
 
     fetchRecipes()
     return () => controller.abort()
-  }, [ingredients])
+  }, [ingredients, dietaryFilters])
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -84,7 +87,7 @@ function Results() {
         const res = await fetch(`${API}/api/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [] }),
+          body: JSON.stringify({ q: searchQuery, ingredients: ingredients ?? [], dietary: dietaryFilters }),
           signal: controller.signal,
         })
         if (res.ok) {
@@ -104,7 +107,7 @@ function Results() {
       }
     }, 300)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [searchQuery, ingredients])
+  }, [searchQuery, ingredients, dietaryFilters])
 
   if (!ingredients) return (
     <div>
@@ -150,6 +153,8 @@ function Results() {
         count={(loading || searching) ? undefined : visible.length}
         searchQuery={searchQuery}
         onSearchChange={(q) => { setSearchQuery(q); setSearching(q.trim().length > 0) }}
+        dietaryFilters={dietaryFilters}
+        onDietaryChange={handleDietaryChange}
       />
 
       {searchError && <div className="error-state" style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{searchError}</div>}
@@ -180,7 +185,7 @@ function Results() {
           ) : (
             <>
               <h3>No matches found</h3>
-              <p>Try adding more ingredients or different ones.</p>
+              <p>{dietaryFilters.length > 0 ? 'Try removing a dietary filter or adding more ingredients.' : 'Try adding more ingredients or different ones.'}</p>
               <button
                 style={{ marginTop: '1.5rem', padding: '10px 28px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', background: 'var(--terra)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '0.9rem' }}
                 onClick={() => navigate('/')}
@@ -218,19 +223,20 @@ function Results() {
               <span id="info-modal-title" className="info-modal-title">How we rank recipes</span>
               <button className="info-close" onClick={() => { setShowInfo(false); infoButtonRef.current?.focus() }} aria-label="Close">×</button>
             </div>
+            <div className="info-modal-sub">Ingredients match approximately · Recipes without nutrition data score 0 for health</div>
 
             <div className="info-section">
               <div className="info-section-title">Best Match</div>
               <div className="info-row">
-                <div className="info-row-label">Recipe coverage<span>% of recipe's ingredients you have</span></div>
+                <div className="info-row-label">Recipe coverage<span>% of the recipe's ingredients you already have</span></div>
                 <div className="info-row-pct">60%</div>
               </div>
               <div className="info-row">
-                <div className="info-row-label">Ingredient use<span>% of your ingredients the recipe uses</span></div>
+                <div className="info-row-label">Ingredient use<span>% of your ingredients the recipe actually uses</span></div>
                 <div className="info-row-pct">25%</div>
               </div>
               <div className="info-row">
-                <div className="info-row-label">Overlap<span>Jaccard similarity between both sets</span></div>
+                <div className="info-row-label">Overlap<span>Shared ÷ total unique ingredients</span></div>
                 <div className="info-row-pct">15%</div>
               </div>
             </div>
@@ -238,18 +244,19 @@ function Results() {
             <div className="info-section">
               <div className="info-section-title">Healthiest</div>
               <div className="info-row">
-                <div className="info-row-label">Protein<span>Target: 25g per serving</span></div>
+                <div className="info-row-label">Protein<span>Full score at ≥25g per serving — higher doesn't help more</span></div>
                 <div className="info-row-pct">45%</div>
               </div>
               <div className="info-row">
-                <div className="info-row-label">Sugar<span>Penalty above 30g</span></div>
+                <div className="info-row-label">Sugar<span>Sugar specifically, not total carbs — penalty scales up to 30g</span></div>
                 <div className="info-row-pct">25%</div>
               </div>
               <div className="info-row">
-                <div className="info-row-label">Calories<span>Penalty above 800 kcal</span></div>
+                <div className="info-row-label">Calories<span>Full score below 800 kcal — penalty scales up to 800</span></div>
                 <div className="info-row-pct">30%</div>
               </div>
             </div>
+
           </div>
         </div>
       )}

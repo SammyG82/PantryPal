@@ -8,6 +8,12 @@ const TAG_CLASSES: Record<string, string> = {
   Indulgent: 'tag-indulgent',
 }
 
+const DIETARY_LABELS: Record<string, { label: string; cls: string }> = {
+  vegetarian:  { label: '🌿 Vegetarian', cls: '' },
+  vegan:       { label: '🌱 Vegan',      cls: 'dietary-badge--vegan' },
+  gluten_free: { label: 'GF',            cls: 'dietary-badge--gf' },
+}
+
 function getEmoji(name: string): string {
   const n = name.toLowerCase()
   if (n.includes('chicken')) return '🍗'
@@ -132,6 +138,11 @@ function RecipeCard({ recipe, rank, sortMode, isFavourited, onToggleFavourite }:
           {tags.map((t) => (
             <span key={t} className={`tag ${TAG_CLASSES[t] ?? 'tag-balanced'}`}>{t}</span>
           ))}
+          {(recipe.dietary_flags ?? []).map((f) => {
+            const d = DIETARY_LABELS[f]
+            if (!d) return null
+            return <span key={f} className={`dietary-badge ${d.cls}`.trim()}>{d.label}</span>
+          })}
         </div>
 
         <div className="recipe-name">{name}</div>

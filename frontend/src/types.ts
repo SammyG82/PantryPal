@@ -23,4 +23,5 @@ export interface Recipe {
   url: string
   ingredients: string[]
   missing_ingredients: string[]
+  dietary_flags?: string[]
 }
