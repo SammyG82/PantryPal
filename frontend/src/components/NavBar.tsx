@@ -19,20 +19,26 @@ function NavBar({ ingredients = [], lastIngredients }: NavBarProps) {
       <div className="nav-right">
         {isResults ? (
           <>
-            <span className="ing-summary-pill">
-              {ingredients.length} ingredient{ingredients.length !== 1 ? 's' : ''}
-            </span>
             <button className="back-btn" onClick={() => navigate('/', { state: { lastIngredients: ingredients } })}>
-              ← Back
+              Home
             </button>
-            <button className="back-btn" onClick={() => navigate('/favorites')}>
+            <button className="back-btn" onClick={() => navigate('/favorites', { state: { lastResultsSearch: window.location.search } })}>
               Favorites
             </button>
           </>
         ) : isFavorites ? (
-          <button className="back-btn" onClick={() => navigate('/')}>
-            ← Back
-          </button>
+          <>
+            <button className="back-btn" onClick={() => navigate('/')}>
+              Home
+            </button>
+            <button
+              className="back-btn"
+              disabled={!(location.state as { lastResultsSearch?: string } | null)?.lastResultsSearch}
+              onClick={() => navigate('/results' + (location.state as { lastResultsSearch?: string }).lastResultsSearch)}
+            >
+              Results
+            </button>
+          </>
         ) : (
           <>
             <button className="back-btn" disabled={!lastIngredients?.length && !ingredients.length} onClick={() => navigate('/results', { state: { ingredients: lastIngredients ?? ingredients } })}>
