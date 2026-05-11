@@ -84,21 +84,21 @@ MEAT_TOKENS = {
 # Applied to joined raw ingredient text at load time.
 # -------------------------------------------------
 _PLANT_DAIRY_RE = re.compile(
-    r'\b(coconut|almond|oat|soy|soya|rice|hemp|cashew)\s+(milk|cream|butter|cheese|yogurt)\b'
-    r'|\b(peanut|almond|cashew|sunflower|hazelnut|apple|peach|pumpkin|cocoa|shea)\s+butter\b'
+    r'\b(?:coconut|almond|oat|soy|soya|rice|hemp|cashew)\s+(?:milk|cream|butter|cheese|yogurt)\b'
+    r'|\b(?:peanut|almond|cashew|sunflower|hazelnut|apple|peach|pumpkin|cocoa|shea)\s+butter\b'
     r'|\bcream\s+of\s+tartar\b'
-    r'|\bnon[- ]dairy\s+(milk|cream|butter|cheese|yogurt)\b'
-    r'|\bdairy[- ]free\s+(milk|cream|butter|cheese|yogurt)\b',
+    r'|\bnon[- ]dairy\s+(?:milk|cream|butter|cheese|yogurt)\b'
+    r'|\bdairy[- ]free\s+(?:milk|cream|butter|cheese|yogurt)\b',
     re.IGNORECASE,
 )
 _GF_FLOUR_RE = re.compile(
-    r'\b(rice|almond|coconut|chickpea|tapioca|potato|corn|cassava|arrowroot|'
+    r'\b(?:rice|almond|coconut|chickpea|tapioca|potato|corn|cassava|arrowroot|'
     r'buckwheat|teff|amaranth|sorghum|millet)\s+flour\b'
     r'|\bgluten[- ]free\s+flour\b',
     re.IGNORECASE,
 )
 _MEAT_SEAFOOD_RE = re.compile(
-    r'\b(chicken|beef|pork|lamb|turkey|duck|goose|veal|venison|bison|'
+    r'\b(?:chicken|beef|pork|lamb|turkey|duck|goose|veal|venison|bison|'
     r'bacon|ham|sausage|pepperoni|salami|prosciutto|pancetta|chorizo|'
     r'fish|salmon|tuna|tilapia|cod|halibut|trout|bass|'
     r'sardines?|shrimps?|prawns?|scallops?|crabs?|lobsters?|oysters?|clams?|'
@@ -106,14 +106,14 @@ _MEAT_SEAFOOD_RE = re.compile(
     re.IGNORECASE,
 )
 _DAIRY_RE = re.compile(
-    r'\b(milk|cream|cheese|butter|yogurt|yoghurt|ghee|whey|casein|lactose|buttermilk|'
+    r'\b(?:milk|cream|cheese|butter|yogurt|yoghurt|ghee|whey|casein|lactose|buttermilk|'
     r'half-and-half)\b',
     re.IGNORECASE,
 )
 _EGG_RE = re.compile(r'\beggs?\b', re.IGNORECASE)
 _HONEY_RE = re.compile(r'\bhoney\b', re.IGNORECASE)
 _GLUTEN_RE = re.compile(
-    r'\b(wheat|flour|barley|rye|spelt|farro|bulgur|semolina|seitan|malt|triticale|'
+    r'\b(?:wheat|flour|barley|rye|spelt|farro|bulgur|semolina|seitan|malt|triticale|'
     r'couscous|pasta|noodles?|udon|ramen|bread|breadcrumbs?|panko|pita|cracker|crouton|oats?)\b'
     r'|\bsoy\s+sauce\b',
     re.IGNORECASE,

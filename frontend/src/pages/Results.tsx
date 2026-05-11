@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import SortBar from '../components/SortBar'
@@ -13,8 +13,23 @@ function Results() {
   const location = useLocation()
   const navigate = useNavigate()
 
+  const urlIngredients = useMemo(() => {
+    const param = new URLSearchParams(window.location.search).get('i')
+    if (!param) return null
+    // URLSearchParams.get() already percent-decodes; do NOT call decodeURIComponent again
+    // (double-decoding throws URIError if decoded value contains a bare %)
+    const parsed = param.split(',').filter(s => s.trim() !== '')
+    return parsed.length > 0 ? parsed : null
+  }, [])
+
+  const urlDietary = useMemo(() => {
+    const param = new URLSearchParams(window.location.search).get('d')
+    if (!param) return []
+    return param.split(',').filter(s => s.trim() !== '')
+  }, [])
+
   const raw = location.state?.ingredients
-  const ingredients: string[] | null = Array.isArray(raw) ? raw : null
+  const ingredients: string[] | null = Array.isArray(raw) ? raw : urlIngredients
 
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [loading, setLoading] = useState(ingredients !== null)
@@ -27,10 +42,12 @@ function Results() {
   const [showInfo, setShowInfo] = useState(false)
   const infoButtonRef = useRef<HTMLButtonElement>(null)
   const [visibleCount, setVisibleCount] = useState(RECIPES_PER_PAGE)
-  const [dietaryFilters, setDietaryFilters] = useState<string[]>([])
+  const [dietaryFilters, setDietaryFilters] = useState<string[]>(urlDietary)
   const handleSortChange = (mode: SortMode) => { setSortMode(mode); setVisibleCount(RECIPES_PER_PAGE) }
   const handleDietaryChange = (filters: string[]) => { setDietaryFilters(filters); setVisibleCount(RECIPES_PER_PAGE) }
   const { toggleFavourite, isFavourited } = useFavourites()
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!showInfo) return
@@ -41,6 +58,19 @@ function Results() {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [showInfo])
+
+  useEffect(() => {
+    if (!ingredients) return
+    let desired = '?i=' + ingredients.map(encodeURIComponent).join(',')
+    if (dietaryFilters.length > 0) desired += '&d=' + dietaryFilters.map(encodeURIComponent).join(',')
+    if (window.location.search !== desired) {
+      window.history.replaceState(null, '', desired)
+    }
+  }, [ingredients, dietaryFilters])
+
+  useEffect(() => {
+    return () => { if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current) }
+  }, [])
 
   useEffect(() => {
     if (!ingredients) return
@@ -113,6 +143,27 @@ function Results() {
     return () => { clearTimeout(timer); controller.abort() }
   }, [searchQuery, ingredients, dietaryFilters])
 
+  const handleShare = async () => {
+    if (!ingredients) return
+    let url = `${window.location.origin}/results?i=${ingredients.map(encodeURIComponent).join(',')}`
+    if (dietaryFilters.length > 0) url += `&d=${dietaryFilters.map(encodeURIComponent).join(',')}`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus(); ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    setCopied(true)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1500)
+  }
+
   if (!ingredients) return (
     <div>
       <NavBar ingredients={[]} />
@@ -144,11 +195,33 @@ function Results() {
     <div>
       <NavBar ingredients={ingredients} />
 
-      <div className="results-header">
-        <h1 className="results-title">Your recipe matches</h1>
-        <p className="results-sub">
-          Based on <strong>{ingredients.join(', ')}</strong>
-        </p>
+      <div className="results-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="results-title">Your recipe matches</h1>
+          <p className="results-sub">
+            Based on <strong>{ingredients.join(', ')}</strong>
+          </p>
+        </div>
+        <button
+          onClick={handleShare}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            fontSize: '0.875rem', fontFamily: "'DM Sans', sans-serif",
+            color: copied ? 'var(--sage)' : 'var(--muted)',
+            cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'none',
+            borderRadius: '50px', padding: '6px 14px',
+            transition: 'color .2s, border-color .2s',
+            flexShrink: 0, minHeight: '36px',
+          }}
+          aria-label={copied ? 'Link copied to clipboard' : 'Copy share link'}
+        >
+          {copied
+            ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 8 6.5 11.5 13 5"/></svg>
+            : <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a2.5 2.5 0 0 0 3.5.5l2-2a2.5 2.5 0 0 0-3.5-3.5L6.5 4.5"/><path d="M10 8a2.5 2.5 0 0 0-3.5-.5l-2 2a2.5 2.5 0 0 0 3.5 3.5L9.5 11.5"/></svg>
+          }
+          {copied ? 'Copied!' : 'Share'}
+        </button>
       </div>
 
       <SortBar

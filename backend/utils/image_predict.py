@@ -3,6 +3,7 @@
 import json
 import logging
 from pathlib import Path
+import warnings
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -93,7 +94,9 @@ def load_model() -> None:
         _labels = json.load(f)
 
     num_classes = len(_labels)
-    clip_model, _, _ = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="QuickGELU mismatch", category=UserWarning)
+        clip_model, _, _ = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
     m = CLIPIngredientClassifier(clip_model, num_classes).to(device)
     m.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True), strict=False)
     m.eval()
