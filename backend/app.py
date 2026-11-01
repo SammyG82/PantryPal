@@ -5,6 +5,8 @@ import asyncio
 import io
 import logging
 import struct
+import threading
+import time
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -36,10 +38,146 @@ def _is_valid_image(contents: bytes) -> bool:
 # -------------------------------------------------
 # App setup
 # -------------------------------------------------
+class _DependencyLoadError(RuntimeError):
+    """Raised when a dependency (recipe data or model) failed its most recent
+    load attempt. Distinct from TimeoutError (still loading). A failure here
+    triggers one background retry (see _ManagedDependency.retry) rather than
+    503ing permanently — the retry lock ensures only one reload attempt runs
+    at a time regardless of how many requests observe the failure."""
+
+
+# How long a request waits on a stuck/in-progress load (e.g. a stalled
+# download) before failing with a 503 instead of hanging forever. Sized for
+# a real cold start: downloading the CLIP weights + model files + the full
+# recipe CSV, then parsing/vectorizing 231k rows, can comfortably exceed a
+# minute on a free-tier container.
+_WARMUP_WAIT_TIMEOUT = 180
+
+# Minimum time between automatic retry attempts for a persistently failing
+# dependency — without this, every request during an outage (e.g. HF Hub
+# unreachable) would immediately re-trigger a full reload the instant the
+# previous attempt finished. Measured from when an attempt *finishes*
+# (stamped in _ManagedDependency.load's `finally`), not when it starts —
+# otherwise a slow failure (e.g. a stalled download taking longer than the
+# cooldown itself) would provide no throttling at all.
+_RETRY_COOLDOWN = 30
+
+
+class _ManagedDependency:
+    """Lazy-loads a heavy dependency (recipe data or model) off the event
+    loop, with a single-retry-at-a-time self-heal on failure. `loader` is a
+    zero-arg callable that performs the load and returns the loaded value
+    (or raises)."""
+
+    def __init__(self, name: str, loader):
+        self.name = name
+        self._loader = loader
+        self.value = None
+        self.ready = threading.Event()
+        self.failed = False
+        self._retry_lock = threading.Lock()
+        self._last_attempt = 0.0
+
+    def load(self) -> None:
+        """Performs the actual load. Called once by the warm-up thread, and
+        again by `retry` if that attempt failed — `_retry_lock` ensures only
+        one load runs at a time, so this is never racing itself."""
+        self.ready.clear()
+        try:
+            self.value = self._loader()
+            self.failed = False
+        except Exception:
+            self.failed = True
+            raise
+        finally:
+            self._last_attempt = time.monotonic()
+            self.ready.set()
+
+    def retry(self) -> bool:
+        """Kicks off one background retry after a failed load, so a
+        transient failure (e.g. a flaky HF Hub download) self-heals instead
+        of 503ing for the rest of the process's life. Returns whether a
+        retry was actually scheduled — False if one's already in flight, or
+        the last attempt was too recent (_RETRY_COOLDOWN) — so callers can
+        report accurately instead of always claiming "retrying"."""
+        if time.monotonic() - self._last_attempt < _RETRY_COOLDOWN:
+            return False
+        if not self._retry_lock.acquire(blocking=False):
+            return False
+
+        def _run():
+            try:
+                self.load()
+            except Exception:
+                logger.exception(f"Retry failed to load {self.name}")
+            finally:
+                self._retry_lock.release()
+
+        try:
+            threading.Thread(target=_run, daemon=True, name=f"{self.name}-retry").start()
+        except Exception:
+            self._retry_lock.release()
+            logger.exception(f"Failed to start retry thread for {self.name}")
+            return False
+        return True
+
+    def get(self, timeout: float):
+        """Blocks until the current load attempt finishes or `timeout`
+        elapses. Never performs the load itself — the warm-up/retry threads
+        are the only loaders — so the timeout always bounds the actual
+        wait, not a lock acquisition."""
+        if not self.ready.wait(timeout=timeout):
+            raise TimeoutError(f"{self.name} is still loading")
+        if self.failed:
+            raise _DependencyLoadError(f"{self.name} failed to load; see server logs")
+        return self.value
+
+
+def _load_df_value():
+    from recipe_search import load_recipes, _build_inverted_index
+    df = load_recipes()
+    _build_inverted_index(df)
+    return df
+
+
+def _load_predictor_value():
+    from utils.image_predict import predict_image, load_model
+    load_model()
+    return predict_image
+
+
+_df_dep = _ManagedDependency("recipe data", _load_df_value)
+_predictor_dep = _ManagedDependency("model", _load_predictor_value)
+
+
+def _warm_up() -> None:
+    """Loads recipe data and the model off the event loop thread, in
+    parallel, so the server can accept requests (and pass the platform
+    health check) immediately instead of blocking for the full load time.
+    Loading them on separate threads means a slow df load can't block the
+    predictor (or vice versa) from becoming ready."""
+    def _run(dep: _ManagedDependency):
+        try:
+            dep.load()
+        except Exception:
+            logger.exception(f"Warm-up failed to load {dep.name}")
+
+    threads = [
+        threading.Thread(target=_run, args=(dep,), daemon=True, name=f"warmup-{dep.name}")
+        for dep in (_df_dep, _predictor_dep)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    if not _df_dep.failed and not _predictor_dep.failed:
+        logger.info("Warm-up complete: recipe data and model loaded")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    get_df()
-    get_predictor()
+    threading.Thread(target=_warm_up, daemon=True, name="warmup").start()
     yield
 
 
@@ -53,32 +191,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------------------------------
-# Lazy-load heavy dependencies so startup is fast
-# even if the model isn't present
-# -------------------------------------------------
-_df = None
+
+async def _await_ready(ready_event: threading.Event, timeout: float) -> None:
+    """Waits for `ready_event` without tying up a thread-pool worker for the
+    whole wait. Routes backed by this call away from a blocking
+    `Event.wait()` on a worker thread (anyio's default pool has limited
+    capacity, e.g. 40) so a slow warm-up/retry can't exhaust it under
+    concurrent requests. Polling via asyncio.sleep costs nothing extra since
+    this app serves one container with low concurrency."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while not ready_event.is_set():
+        if loop.time() >= deadline:
+            raise TimeoutError("Still loading")
+        await asyncio.sleep(0.25)
 
 
-def get_df():
-    global _df
-    if _df is None:
-        from recipe_search import load_recipes, _build_inverted_index
-        _df = load_recipes()
-        _build_inverted_index(_df)
-    return _df
-
-
-_predictor = None
-
-
-def get_predictor():
-    global _predictor
-    if _predictor is None:
-        from utils.image_predict import predict_image, load_model
-        load_model()
-        _predictor = predict_image
-    return _predictor
+async def _get_or_503(dep: _ManagedDependency):
+    try:
+        await _await_ready(dep.ready, _WARMUP_WAIT_TIMEOUT)
+        return dep.get(timeout=0)
+    except TimeoutError:
+        raise HTTPException(status_code=503, detail="Server is still starting up, try again shortly")
+    except _DependencyLoadError:
+        retried = dep.retry()
+        suffix = ", retrying" if retried else ""
+        label = dep.name[0].upper() + dep.name[1:]
+        raise HTTPException(status_code=503, detail=f"{label} failed to load{suffix} — try again shortly")
 
 
 # -------------------------------------------------
@@ -173,8 +312,40 @@ def _to_recipe_response(r: dict) -> RecipeResponse:
 # Endpoints
 # -------------------------------------------------
 @app.get("/")
-def root():
+async def root():
     return {"message": "PantryPal API is running"}
+
+
+@app.get("/health")
+async def health():
+    # Recipe data backs nearly everything (/api/search, /api/recipes,
+    # /api/correct), while the model only backs /api/detect — so a failed
+    # model load is reported as "degraded" (search still works), not lumped
+    # into the same "error" status as a failed data load. Order matters:
+    # "degraded" is only accurate once df has actually finished loading —
+    # checking df's readiness first keeps a still-loading df from being
+    # reported as "degraded" (which would wrongly imply search already
+    # works).
+    # Checking *.ready.is_set() rather than *.failed directly matters too:
+    # _ManagedDependency.load clears the ready event for the duration of
+    # every attempt, including retries, while .failed still holds the
+    # previous (failed) outcome until that attempt finishes. Reading
+    # .failed without the readiness check would report "error"/"degraded"
+    # for the whole duration of a retry that's actively in progress and may
+    # be about to succeed, instead of "loading".
+    # Since df loads independently of (and in parallel with) the predictor,
+    # df can finish — and search already be usable — while the predictor is
+    # still loading; that gets its own "partially_ready" status rather than
+    # being lumped into the generic startup "loading" state.
+    if not _df_dep.ready.is_set():
+        return {"status": "loading"}
+    if _df_dep.failed:
+        return {"status": "error", "detail": "recipe data failed to load — check server logs"}
+    if not _predictor_dep.ready.is_set():
+        return {"status": "partially_ready", "detail": "recipe search ready, model still loading"}
+    if _predictor_dep.failed:
+        return {"status": "degraded", "detail": "model failed to load — image detection unavailable, check server logs"}
+    return {"status": "ready"}
 
 
 @app.post("/api/detect", response_model=DetectResponse)
@@ -202,9 +373,11 @@ async def detect_ingredients(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Server error processing image")
 
     try:
-        predict_fn = get_predictor()
-        label = await asyncio.get_running_loop().run_in_executor(None, predict_fn, image)
+        predict_fn = await _get_or_503(_predictor_dep)
+        label = await asyncio.to_thread(predict_fn, image)
         ingredients = [label] if label else []
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Model inference failed")
         raise HTTPException(status_code=500, detail="Model inference failed")
@@ -228,15 +401,15 @@ class SearchRequest(BaseModel):
 
 
 @app.post("/api/correct", response_model=CorrectResponse)
-def correct_ingredient_endpoint(body: CorrectRequest):
+async def correct_ingredient_endpoint(body: CorrectRequest):
     from recipe_search import correct_ingredient
-    df = get_df()
-    corrected, found = correct_ingredient(body.ingredient, df)
+    df = await _get_or_503(_df_dep)
+    corrected, found = await asyncio.to_thread(correct_ingredient, body.ingredient, df)
     return CorrectResponse(corrected=corrected, found=found)
 
 
 @app.post("/api/search", response_model=List[RecipeResponse])
-def search_recipes(body: SearchRequest):
+async def search_recipes(body: SearchRequest):
     if not body.q.strip():
         return []
 
@@ -246,15 +419,19 @@ def search_recipes(body: SearchRequest):
 
     from recipe_search import search_by_name
 
-    df = get_df()
-    valid_indices = _get_dietary_valid_indices(df, body.dietary)
-    results = search_by_name(body.q, df, user_ings=body.ingredients or None, valid_indices=valid_indices)
+    df = await _get_or_503(_df_dep)
+
+    def _run():
+        valid_indices = _get_dietary_valid_indices(df, body.dietary)
+        return search_by_name(body.q, df, user_ings=body.ingredients or None, valid_indices=valid_indices)
+
+    results = await asyncio.to_thread(_run)
 
     return [_to_recipe_response(r) for r in results]
 
 
 @app.post("/api/recipes", response_model=List[RecipeResponse])
-def get_recipes(body: RecipesRequest):
+async def get_recipes(body: RecipesRequest):
     if not body.ingredients:
         raise HTTPException(status_code=400, detail="No ingredients provided")
     if len(body.ingredients) > 50:
@@ -266,9 +443,13 @@ def get_recipes(body: RecipesRequest):
 
     from recipe_search import match_recipes
 
-    df = get_df()
-    valid_indices = _get_dietary_valid_indices(df, body.dietary)
-    results = match_recipes(body.ingredients, df, valid_indices=valid_indices)
+    df = await _get_or_503(_df_dep)
+
+    def _run():
+        valid_indices = _get_dietary_valid_indices(df, body.dietary)
+        return match_recipes(body.ingredients, df, valid_indices=valid_indices)
+
+    results = await asyncio.to_thread(_run)
 
     return [_to_recipe_response(r) for r in results]
 
