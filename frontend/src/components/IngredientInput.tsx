@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { toTitleCase, API } from '../utils'
+import { toTitleCase, API, apiFetch } from '../utils'
 
 interface IngredientInputProps {
   onAdd: (value: string, supported: boolean) => void
@@ -8,6 +8,7 @@ interface IngredientInputProps {
 function IngredientInput({ onAdd }: IngredientInputProps) {
   const [value, setValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [waking, setWaking] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => () => { abortRef.current?.abort() }, [])
@@ -22,12 +23,12 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
     abortRef.current = controller
 
     try {
-      const res = await fetch(`${API}/api/correct`, {
+      const res = await apiFetch(`${API}/api/correct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredient: trimmed }),
         signal: controller.signal,
-      })
+      }, () => setWaking(true))
       if (res.ok) {
         const data = await res.json() as { corrected: string; found: boolean }
         onAdd(data.corrected, data.found)
@@ -38,6 +39,7 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
       if ((err as { name?: string }).name !== 'AbortError') onAdd(trimmed, false)
     } finally {
       setSubmitting(false)
+      setWaking(false)
     }
   }
 
@@ -46,20 +48,23 @@ function IngredientInput({ onAdd }: IngredientInputProps) {
   }
 
   return (
-    <div className="text-row">
-      <input
-        type="text"
-        aria-label="Add an ingredient"
-        placeholder="e.g. chicken, tomatoes..."
-        value={value}
-        disabled={submitting}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
-      <button type="button" className="add-btn" disabled={submitting} onClick={() => void handleSubmit()}>
-        Add
-      </button>
-    </div>
+    <>
+      <div className="text-row">
+        <input
+          type="text"
+          aria-label="Add an ingredient"
+          placeholder="e.g. chicken, tomatoes..."
+          value={value}
+          disabled={submitting}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <button type="button" className="add-btn" disabled={submitting} onClick={() => void handleSubmit()}>
+          Add
+        </button>
+      </div>
+      {waking && <p className="detecting-msg">Waking up the server — this can take up to a minute…</p>}
+    </>
   )
 }
 

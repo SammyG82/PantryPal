@@ -4,7 +4,7 @@ import NavBar from '../components/NavBar'
 import SortBar from '../components/SortBar'
 import RecipeCard from '../components/RecipeCard'
 import { useFavourites } from '../hooks/useFavourites'
-import { API } from '../utils'
+import { API, apiFetch } from '../utils'
 import type { Recipe, SortMode } from '../types'
 
 const RECIPES_PER_PAGE = 9
@@ -34,6 +34,7 @@ function Results() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [loading, setLoading] = useState(ingredients !== null)
   const [error, setError] = useState<string | null>(null)
+  const [waking, setWaking] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('match')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null)
@@ -80,14 +81,15 @@ function Results() {
     const fetchRecipes = async () => {
       setLoading(true)
       setError(null)
+      setWaking(false)
       setVisibleCount(RECIPES_PER_PAGE)
       try {
-        const res = await fetch(`${API}/api/recipes`, {
+        const res = await apiFetch(`${API}/api/recipes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ingredients, dietary: dietaryFilters }),
           signal: controller.signal,
-        })
+        }, () => setWaking(true))
         if (!res.ok) {
           const body = await res.json().catch(() => null) as { detail?: string } | null
           throw new Error(body?.detail ?? `Server error: ${res.status}`)
@@ -98,7 +100,7 @@ function Results() {
         if ((err as { name?: string }).name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
-        if (!controller.signal.aborted) setLoading(false)
+        if (!controller.signal.aborted) { setLoading(false); setWaking(false) }
       }
     }
 
@@ -236,7 +238,12 @@ function Results() {
 
       {searchError && <div className="error-state" style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{searchError}</div>}
 
-      {loading && <div className="loading-state">Finding recipes for you…</div>}
+      {loading && (
+        <div className="loading-state">
+          Finding recipes for you…
+          {waking && <><br />Waking up the server — this can take up to a minute.</>}
+        </div>
+      )}
 
       {error && (
         <div className="error-state">

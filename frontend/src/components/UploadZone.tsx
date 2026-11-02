@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { toTitleCase, API } from '../utils'
+import { toTitleCase, API, apiFetch } from '../utils'
 import IngredientChip from './IngredientChip'
 import type { Upload } from '../types'
 
@@ -17,6 +17,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
     const [dragOver, setDragOver] = useState(false)
     const [uploads, setUploads] = useState<Upload[]>(initialUploads ?? [])
     const [dragError, setDragError] = useState<string | null>(null)
+    const [waking, setWaking] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
 
     const onUploadsChangeRef = useRef(onUploadsChange)
@@ -58,7 +59,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
       try {
         const formData = new FormData()
         formData.append('file', file)
-        const res = await fetch(`${API}/api/detect`, { method: 'POST', body: formData, signal: controller.signal })
+        const res = await apiFetch(`${API}/api/detect`, { method: 'POST', body: formData, signal: controller.signal }, () => setWaking(true))
         if (res.ok) {
           const data = await res.json() as { ingredients: string[] }
           const raw = (data.ingredients?.[0] ?? '').trim()
@@ -73,6 +74,7 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
         setUploads((prev) => prev.map((u) => u.id === id ? { ...u, detecting: false } : u))
       } finally {
         abortControllersRef.current.delete(id)
+        setWaking(false)
       }
     }
 
@@ -185,7 +187,11 @@ const UploadZone = forwardRef<UploadZoneHandle, UploadZoneProps>(
           </div>
         )}
 
-        {anyDetecting && <p className="detecting-msg">Detecting ingredients...</p>}
+        {anyDetecting && (
+          <p className="detecting-msg">
+            {waking ? 'Waking up the server — this can take up to a minute…' : 'Detecting ingredients...'}
+          </p>
+        )}
         {dragError && <p className="detecting-msg" style={{ color: 'var(--terra)' }}>{dragError}</p>}
 
         {detectedUploads.length > 0 && (
