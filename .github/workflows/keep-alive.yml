@@ -1,0 +1,43 @@
+name: Keep Backend Alive
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Ping /health endpoint
+        run: |
+          check() {
+            response=$(curl -s -o /tmp/health.json -w "%{http_code}" https://sammyg82-pantrypal.hf.space/health)
+            if [ "$response" != "200" ]; then
+              echo "Health check failed: got HTTP $response"
+              cat /tmp/health.json 2>/dev/null
+              return 1
+            fi
+            if ! grep -q '"status"[[:space:]]*:[[:space:]]*"ready"' /tmp/health.json; then
+              echo "Health check failed: unexpected response body:"
+              cat /tmp/health.json
+              return 1
+            fi
+            echo "Health check passed:"
+            cat /tmp/health.json
+            return 0
+          }
+
+          for i in $(seq 1 8); do
+            if check; then
+              exit 0
+            fi
+            if [ "$i" -lt 8 ]; then
+              echo "Attempt $i failed, retrying in 30s..."
+              sleep 30
+            fi
+          done
+
+          echo "Health check failed after 8 attempts (~4 minutes) — see logs above"
+          exit 1
